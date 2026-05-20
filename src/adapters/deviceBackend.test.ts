@@ -4,6 +4,7 @@ import {
   AUTO_GLM_DOUBLE_TAP_INTERVAL_MS,
   buildInputCommand,
   buildInputCommandSequence,
+  encodeAdbKeyboardText,
   escapeInputText,
   isAndroidInputTextSafe,
   isAdbKeyboardInstalled,
@@ -141,6 +142,11 @@ describe('escapeInputText', () => {
       isAdbKeyboardInstalled(`com.android.inputmethod.latin/.LatinIME\ncom.android.adbkeyboard/.AdbIME`),
     ).toBe(true)
     expect(isAdbKeyboardInstalled('com.android.inputmethod.latin/.LatinIME')).toBe(false)
+  })
+
+  it('encodes Unicode text for ADB Keyboard base64 input', () => {
+    expect(encodeAdbKeyboardText('测试发送')).toBe('5rWL6K+V5Y+R6YCB')
+    expect(encodeAdbKeyboardText('hello world')).toBe('aGVsbG8gd29ybGQ=')
   })
 })
 

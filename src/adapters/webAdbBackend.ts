@@ -9,6 +9,7 @@ import {
   bytesToDataUrl,
   delay,
   DeviceBackendError,
+  encodeAdbKeyboardText,
   isAdbKeyboardInstalled,
   isAndroidInputTextSafe,
   parsePngSize,
@@ -137,21 +138,45 @@ export class WebAdbDeviceBackend implements DeviceBackend {
   async #inputTextWithAdbKeyboard(text: string) {
     const adb = this.#requireAdb()
     await this.#assertAdbKeyboardInstalled()
+    const originalIme = await this.#getCurrentInputMethod()
+    const executed: string[] = []
 
     try {
       await adb.subprocess.noneProtocol.spawnWaitText(['ime', 'enable', ADB_KEYBOARD_IME])
+      executed.push(`ime enable ${ADB_KEYBOARD_IME}`)
       await adb.subprocess.noneProtocol.spawnWaitText(['ime', 'set', ADB_KEYBOARD_IME])
+      executed.push(`ime set ${ADB_KEYBOARD_IME}`)
+      await this.#sendAdbKeyboardText('')
+      executed.push('am broadcast -a ADB_INPUT_B64 --es msg <empty>')
+      await delay(AUTO_GLM_ACTION_SETTLE_DELAY_MS)
+
+      await adb.subprocess.noneProtocol.spawnWait(['am', 'broadcast', '-a', 'ADB_CLEAR_TEXT'])
+      executed.push('am broadcast -a ADB_CLEAR_TEXT')
+      await delay(AUTO_GLM_ACTION_SETTLE_DELAY_MS)
+
+      const command = await this.#sendAdbKeyboardText(text)
+      executed.push(command.join(' '))
+      await delay(AUTO_GLM_ACTION_SETTLE_DELAY_MS)
     } catch {
       throw new DeviceBackendError(
         'Chinese or complex text requires ADB Keyboard. Install com.android.adbkeyboard/.AdbIME on the device, then try again.',
       )
+    } finally {
+      if (originalIme && originalIme !== ADB_KEYBOARD_IME) {
+        await adb.subprocess.noneProtocol.spawnWaitText(['ime', 'set', originalIme])
+        await delay(AUTO_GLM_ACTION_SETTLE_DELAY_MS)
+      }
     }
 
-    const command = ['am', 'broadcast', '-a', 'ADB_INPUT_TEXT', '--es', 'msg', text]
-    await adb.subprocess.noneProtocol.spawnWait(command)
-    await delay(AUTO_GLM_ACTION_SETTLE_DELAY_MS)
     this.#preferAdbKeyboard = true
-    return command.join(' ')
+    return executed.join('\n')
+  }
+
+  async #sendAdbKeyboardText(text: string) {
+    const command = ['am', 'broadcast', '-a', 'ADB_INPUT_B64', '--es', 'msg', encodeAdbKeyboardText(text)]
+    const adb = this.#requireAdb()
+    await adb.subprocess.noneProtocol.spawnWait(command)
+    return command
   }
 
   async #assertAdbKeyboardInstalled() {
@@ -161,6 +186,16 @@ export class WebAdbDeviceBackend implements DeviceBackend {
         'Chinese or complex text requires ADB Keyboard. Install com.android.adbkeyboard/.AdbIME on the device, then try again.',
       )
     }
+  }
+
+  async #getCurrentInputMethod() {
+    const result = await this.#requireAdb().subprocess.noneProtocol.spawnWaitText([
+      'settings',
+      'get',
+      'secure',
+      'default_input_method',
+    ])
+    return result.trim()
   }
 
   #requireAdb() {

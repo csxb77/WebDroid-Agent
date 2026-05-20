@@ -112,6 +112,15 @@ export function isAdbKeyboardInstalled(imeListOutput: string) {
   return imeListOutput.split(/\s+/).includes(ADB_KEYBOARD_IME)
 }
 
+export function encodeAdbKeyboardText(text: string) {
+  const bytes = new TextEncoder().encode(text)
+  let binary = ''
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000))
+  }
+  return btoa(binary)
+}
+
 export function keyToAndroidKeyCode(key: KeyAction['key']) {
   const keycodes: Record<KeyAction['key'], string> = {
     APP_SWITCH: 'KEYCODE_APP_SWITCH',
