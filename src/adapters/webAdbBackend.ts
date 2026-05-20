@@ -3,14 +3,13 @@ import AdbWebCredentialStore from '@yume-chan/adb-credential-web'
 import { AdbDaemonWebUsbDeviceManager } from '@yume-chan/adb-daemon-webusb'
 import type { AgentAction } from '../lib/actions'
 import {
-  ADB_KEYBOARD_IME,
   AUTO_GLM_ACTION_SETTLE_DELAY_MS,
   buildInputCommandSequence,
   bytesToDataUrl,
   delay,
   DeviceBackendError,
   encodeAdbKeyboardText,
-  isAdbKeyboardInstalled,
+  findAdbKeyboardIme,
   isAndroidInputTextSafe,
   parsePngSize,
   type DeviceCommandStep,
@@ -115,11 +114,11 @@ export class WebAdbDeviceBackend implements DeviceBackend {
 
   async enableAdbKeyboard(): Promise<string> {
     const adb = this.#requireAdb()
-    await this.#assertAdbKeyboardInstalled()
-    const enable = await adb.subprocess.noneProtocol.spawnWaitText(['ime', 'enable', ADB_KEYBOARD_IME])
-    const set = await adb.subprocess.noneProtocol.spawnWaitText(['ime', 'set', ADB_KEYBOARD_IME])
+    const keyboardIme = await this.#detectAdbKeyboardIme()
+    const enable = await adb.subprocess.noneProtocol.spawnWaitText(['ime', 'enable', keyboardIme])
+    const set = await adb.subprocess.noneProtocol.spawnWaitText(['ime', 'set', keyboardIme])
     this.#preferAdbKeyboard = true
-    return [enable.trim(), set.trim()].filter(Boolean).join('\n') || `Enabled ${ADB_KEYBOARD_IME}`
+    return [enable.trim(), set.trim()].filter(Boolean).join('\n') || `Enabled ${keyboardIme}`
   }
 
   setPreferAdbKeyboard(value: boolean) {
@@ -137,15 +136,15 @@ export class WebAdbDeviceBackend implements DeviceBackend {
 
   async #inputTextWithAdbKeyboard(text: string) {
     const adb = this.#requireAdb()
-    await this.#assertAdbKeyboardInstalled()
+    const keyboardIme = await this.#detectAdbKeyboardIme()
     const originalIme = await this.#getCurrentInputMethod()
     const executed: string[] = []
 
     try {
-      await adb.subprocess.noneProtocol.spawnWaitText(['ime', 'enable', ADB_KEYBOARD_IME])
-      executed.push(`ime enable ${ADB_KEYBOARD_IME}`)
-      await adb.subprocess.noneProtocol.spawnWaitText(['ime', 'set', ADB_KEYBOARD_IME])
-      executed.push(`ime set ${ADB_KEYBOARD_IME}`)
+      await adb.subprocess.noneProtocol.spawnWaitText(['ime', 'enable', keyboardIme])
+      executed.push(`ime enable ${keyboardIme}`)
+      await adb.subprocess.noneProtocol.spawnWaitText(['ime', 'set', keyboardIme])
+      executed.push(`ime set ${keyboardIme}`)
       await this.#sendAdbKeyboardText('')
       executed.push('am broadcast -a ADB_INPUT_B64 --es msg <empty>')
       await delay(AUTO_GLM_ACTION_SETTLE_DELAY_MS)
@@ -159,10 +158,10 @@ export class WebAdbDeviceBackend implements DeviceBackend {
       await delay(AUTO_GLM_ACTION_SETTLE_DELAY_MS)
     } catch {
       throw new DeviceBackendError(
-        'Chinese or complex text requires ADB Keyboard. Install com.android.adbkeyboard/.AdbIME on the device, then try again.',
+        'ADB Keyboard or AutoGLM Keyboard was detected but did not accept the text broadcast. Re-enable the keyboard on the device, then try again.',
       )
     } finally {
-      if (originalIme && originalIme !== ADB_KEYBOARD_IME) {
+      if (originalIme && originalIme !== keyboardIme) {
         await adb.subprocess.noneProtocol.spawnWaitText(['ime', 'set', originalIme])
         await delay(AUTO_GLM_ACTION_SETTLE_DELAY_MS)
       }
@@ -179,13 +178,15 @@ export class WebAdbDeviceBackend implements DeviceBackend {
     return command
   }
 
-  async #assertAdbKeyboardInstalled() {
+  async #detectAdbKeyboardIme() {
     const imeList = await this.#requireAdb().subprocess.noneProtocol.spawnWaitText(['ime', 'list', '-s'])
-    if (!isAdbKeyboardInstalled(imeList)) {
+    const keyboardIme = findAdbKeyboardIme(imeList)
+    if (!keyboardIme) {
       throw new DeviceBackendError(
-        'Chinese or complex text requires ADB Keyboard. Install com.android.adbkeyboard/.AdbIME on the device, then try again.',
+        'Chinese or complex text requires ADB Keyboard or AutoGLM Keyboard. Install and enable it on the device, then try again.',
       )
     }
+    return keyboardIme
   }
 
   async #getCurrentInputMethod() {

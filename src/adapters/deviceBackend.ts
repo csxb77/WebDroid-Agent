@@ -109,7 +109,22 @@ export function isAndroidInputTextSafe(text: string) {
 }
 
 export function isAdbKeyboardInstalled(imeListOutput: string) {
-  return imeListOutput.split(/\s+/).includes(ADB_KEYBOARD_IME)
+  return findAdbKeyboardIme(imeListOutput) !== null
+}
+
+export function findAdbKeyboardIme(imeListOutput: string) {
+  const imes = imeListOutput.split(/\s+/).map(normalizeImeListItem).filter(Boolean)
+  const exact = imes.find((ime) => ime === ADB_KEYBOARD_IME)
+  if (exact) {
+    return exact
+  }
+
+  return (
+    imes.find((ime) => {
+      const lower = ime.toLowerCase()
+      return lower.includes('autoglm') || lower.includes('adbkeyboard') || lower.endsWith('/.adbime')
+    }) ?? null
+  )
 }
 
 export function encodeAdbKeyboardText(text: string) {
@@ -119,6 +134,10 @@ export function encodeAdbKeyboardText(text: string) {
     binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000))
   }
   return btoa(binary)
+}
+
+function normalizeImeListItem(value: string) {
+  return value.replace(/^ime:/, '').trim()
 }
 
 export function keyToAndroidKeyCode(key: KeyAction['key']) {

@@ -6,6 +6,7 @@ import {
   buildInputCommandSequence,
   encodeAdbKeyboardText,
   escapeInputText,
+  findAdbKeyboardIme,
   isAndroidInputTextSafe,
   isAdbKeyboardInstalled,
   keyToAndroidKeyCode,
@@ -141,7 +142,18 @@ describe('escapeInputText', () => {
     expect(
       isAdbKeyboardInstalled(`com.android.inputmethod.latin/.LatinIME\ncom.android.adbkeyboard/.AdbIME`),
     ).toBe(true)
+    expect(isAdbKeyboardInstalled('com.zhipu.autoglm.keyboard/.AdbIME')).toBe(true)
+    expect(isAdbKeyboardInstalled('com.autoglm.keyboard/.AutoGLMKeyboardIME')).toBe(true)
     expect(isAdbKeyboardInstalled('com.android.inputmethod.latin/.LatinIME')).toBe(false)
+  })
+
+  it('selects the detected AutoGLM-compatible keyboard IME', () => {
+    expect(
+      findAdbKeyboardIme(`com.android.inputmethod.latin/.LatinIME\ncom.zhipu.autoglm.keyboard/.AdbIME`),
+    ).toBe('com.zhipu.autoglm.keyboard/.AdbIME')
+    expect(findAdbKeyboardIme('com.autoglm.keyboard/.AutoGLMKeyboardIME')).toBe(
+      'com.autoglm.keyboard/.AutoGLMKeyboardIME',
+    )
   })
 
   it('encodes Unicode text for ADB Keyboard base64 input', () => {
