@@ -43,6 +43,7 @@ describe('settings persistence', () => {
       actionSettleMs: 350,
       doubleTapIntervalMs: 75,
       keyboardStepMs: 450,
+      themeMode: 'dark',
     }
 
     expect(
@@ -96,6 +97,7 @@ describe('settings persistence', () => {
             actionSettleMs: -1,
             doubleTapIntervalMs: 10000,
             keyboardStepMs: Number.NaN,
+            themeMode: 'blue',
           }),
         }),
       ),

@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import appCss from './App.css?raw'
 
 const backendMock = vi.hoisted(() => ({
   connect: vi.fn(),
@@ -22,6 +23,28 @@ vi.mock('./adapters/webAdbBackend', () => ({
   isWebUsbSupported: () => true,
 }))
 
+function readMediaBlock(css: string, query: string) {
+  const start = css.indexOf(`@media (${query}) {`)
+  if (start < 0) {
+    return ''
+  }
+
+  let depth = 0
+  for (let index = start; index < css.length; index += 1) {
+    if (css[index] === '{') {
+      depth += 1
+    }
+    if (css[index] === '}') {
+      depth -= 1
+    }
+    if (depth === 0 && index > start) {
+      return css.slice(start, index + 1)
+    }
+  }
+
+  return css.slice(start)
+}
+
 describe('App run log', () => {
   beforeEach(() => {
     const values = new Map<string, string>()
@@ -38,6 +61,7 @@ describe('App run log', () => {
       configurable: true,
       value: storage,
     })
+    document.documentElement.removeAttribute('data-theme')
 
     backendMock.connect.mockResolvedValue({
       serial: 'device-1',
@@ -104,18 +128,38 @@ describe('App run log', () => {
     expect(details?.hasAttribute('open')).toBe(false)
   })
 
-  it('opens an about page with repository stats from the top right', async () => {
+  it('opens settings with repository stats from the top right', async () => {
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: /about/i }))
+    expect(screen.queryByRole('button', { name: /^about$/i })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }))
 
-    expect(await screen.findByRole('dialog', { name: /about webdroid agent/i })).toBeTruthy()
+    expect(await screen.findByRole('dialog', { name: /settings/i })).toBeTruthy()
     expect(screen.getByRole('link', { name: /github repository/i }).getAttribute('href')).toBe(
       'https://github.com/yeahhe365/webadb-autoglm',
     )
     expect(await screen.findByText('123')).toBeTruthy()
     expect(screen.getByText('45')).toBeTruthy()
     expect(screen.getByText('6')).toBeTruthy()
+  })
+
+  it('cycles and persists the theme mode from the top bar', () => {
+    render(<App />)
+
+    expect(document.documentElement.dataset.theme).toBe('system')
+
+    fireEvent.click(screen.getByRole('button', { name: /theme: system/i }))
+    expect(screen.getByRole('button', { name: /theme: light/i })).toBeTruthy()
+    expect(document.documentElement.dataset.theme).toBe('light')
+
+    fireEvent.click(screen.getByRole('button', { name: /theme: light/i }))
+    expect(screen.getByRole('button', { name: /theme: dark/i })).toBeTruthy()
+    expect(document.documentElement.dataset.theme).toBe('dark')
+
+    expect(localStorage.setItem).toHaveBeenLastCalledWith(
+      'webdroid-agent-settings',
+      expect.stringContaining('"themeMode":"dark"'),
+    )
   })
 
   it('keeps follow-up user messages in a continuous chat transcript', () => {
@@ -163,5 +207,11 @@ describe('App run log', () => {
 
     expect(details).toBeTruthy()
     expect(details?.hasAttribute('open')).toBe(false)
+  })
+
+  it('keeps the top bar horizontal at tablet-width viewports', () => {
+    const tabletBreakpoint = readMediaBlock(appCss, 'max-width: 1120px')
+
+    expect(tabletBreakpoint).not.toMatch(/\.topbar\s*\{[\s\S]*?flex-direction:\s*column/)
   })
 })

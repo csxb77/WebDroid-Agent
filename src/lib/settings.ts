@@ -1,6 +1,8 @@
 import type { ModelConfig } from './openAiClient'
 import type { PromptMode } from './prompts'
 
+export type ThemeMode = 'system' | 'light' | 'dark'
+
 export type AppSettings = {
   modelConfig: ModelConfig
   task: string
@@ -13,6 +15,7 @@ export type AppSettings = {
   actionSettleMs: number
   doubleTapIntervalMs: number
   keyboardStepMs: number
+  themeMode: ThemeMode
 }
 
 export type SettingsStorage = Pick<Storage, 'getItem' | 'setItem'>
@@ -39,6 +42,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   actionSettleMs: 1000,
   doubleTapIntervalMs: 100,
   keyboardStepMs: 1000,
+  themeMode: 'system',
 }
 
 export function loadSettings(storage: SettingsStorage = localStorage): AppSettings {
@@ -103,6 +107,7 @@ function normalizeSettings(candidate: unknown): AppSettings {
       1000,
     ),
     keyboardStepMs: readRangeNumber(candidate.keyboardStepMs, DEFAULT_SETTINGS.keyboardStepMs, 100, 5000),
+    themeMode: readThemeMode(candidate.themeMode, DEFAULT_SETTINGS.themeMode),
   }
 }
 
@@ -125,6 +130,10 @@ function readBoolean(value: unknown, fallback: boolean) {
 
 function readPromptMode(value: unknown, fallback: PromptMode): PromptMode {
   return value === 'canonical-json' || value === 'autoglm-native' ? value : fallback
+}
+
+function readThemeMode(value: unknown, fallback: ThemeMode): ThemeMode {
+  return value === 'system' || value === 'light' || value === 'dark' ? value : fallback
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

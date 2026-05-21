@@ -1,8 +1,49 @@
 :root {
   --sans:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #172026;
-  background: #f4f7f8;
+  --accent: #2f74b5;
+  --accent-soft: #eef6fb;
+  --accent-soft-border: #cfe2ee;
+  --accent-soft-text: #2d5d7f;
+  --border: #d9e1e5;
+  --border-strong: #cfd9de;
+  --button-bg: #eef2f3;
+  --button-bg-hover: #e4edf1;
+  --danger: #9b3723;
+  --danger-bg: #fff2ed;
+  --danger-border: #f2c7ba;
+  --grid-line: rgba(23, 32, 38, 0.05);
+  --modal-text: #eef2f3;
+  --overlay: rgba(17, 24, 29, 0.62);
+  --on-contrast: #ffffff;
+  --on-primary: #ffffff;
+  --page-bg: #f4f7f8;
+  --panel-bg: #ffffff;
+  --phone-shell: #172026;
+  --phone-screen: #11181d;
+  --primary: #1c7c54;
+  --primary-hover: #166843;
+  --primary-muted: #8bbdaa;
+  --shadow: rgba(28, 44, 55, 0.08);
+  --shadow-strong: rgba(0, 0, 0, 0.28);
+  --status-bg: #eef2f3;
+  --status-ok-bg: #e7f5ef;
+  --status-ok-border: #b7decf;
+  --status-ok-text: #1d6b4f;
+  --status-text: #53636d;
+  --subtle-bg: #f8fafb;
+  --surface-muted: #f2f5f6;
+  --surface-muted-border: #dfe7eb;
+  --text: #172026;
+  --text-muted: #5b6f7c;
+  --text-soft: #6d7c86;
+  --text-secondary: #42515c;
+  --warn: #8b5c10;
+  --warn-bg: #fff4dc;
+  --warn-border: #f0d49d;
+  color: var(--text);
+  background: var(--page-bg);
+  color-scheme: light;
   font: 16px/1.45 var(--sans);
   font-synthesis: none;
   letter-spacing: 0;
@@ -11,11 +52,102 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+:root[data-theme='dark'] {
+  --accent: #75b8f0;
+  --accent-soft: #153249;
+  --accent-soft-border: #254b68;
+  --accent-soft-text: #9fd0fb;
+  --border: #2b3942;
+  --border-strong: #3a4a54;
+  --button-bg: #1d2931;
+  --button-bg-hover: #26353f;
+  --danger: #ffb2a1;
+  --danger-bg: #3a1d17;
+  --danger-border: #734135;
+  --grid-line: rgba(238, 244, 247, 0.06);
+  --modal-text: #eef2f3;
+  --overlay: rgba(3, 8, 11, 0.72);
+  --on-contrast: #0f1418;
+  --on-primary: #ffffff;
+  --page-bg: #0f1418;
+  --panel-bg: #151d23;
+  --phone-shell: #0c1115;
+  --phone-screen: #0b1014;
+  --primary: #43a978;
+  --primary-hover: #55bd89;
+  --primary-muted: #2e684f;
+  --shadow: rgba(0, 0, 0, 0.22);
+  --shadow-strong: rgba(0, 0, 0, 0.5);
+  --status-bg: #1d2931;
+  --status-ok-bg: #173428;
+  --status-ok-border: #2e6b50;
+  --status-ok-text: #8be0b9;
+  --status-text: #b2c0c9;
+  --subtle-bg: #11191f;
+  --surface-muted: #1c252c;
+  --surface-muted-border: #2f3d46;
+  --text: #eef4f7;
+  --text-muted: #9fb0bc;
+  --text-soft: #8ea0aa;
+  --text-secondary: #c6d3da;
+  --warn: #ffd48a;
+  --warn-bg: #332714;
+  --warn-border: #6f5523;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme='system'] {
+    --accent: #75b8f0;
+    --accent-soft: #153249;
+    --accent-soft-border: #254b68;
+    --accent-soft-text: #9fd0fb;
+    --border: #2b3942;
+    --border-strong: #3a4a54;
+    --button-bg: #1d2931;
+    --button-bg-hover: #26353f;
+    --danger: #ffb2a1;
+    --danger-bg: #3a1d17;
+    --danger-border: #734135;
+    --grid-line: rgba(238, 244, 247, 0.06);
+    --modal-text: #eef2f3;
+    --overlay: rgba(3, 8, 11, 0.72);
+    --on-contrast: #0f1418;
+    --on-primary: #ffffff;
+    --page-bg: #0f1418;
+    --panel-bg: #151d23;
+    --phone-shell: #0c1115;
+    --phone-screen: #0b1014;
+    --primary: #43a978;
+    --primary-hover: #55bd89;
+    --primary-muted: #2e684f;
+    --shadow: rgba(0, 0, 0, 0.22);
+    --shadow-strong: rgba(0, 0, 0, 0.5);
+    --status-bg: #1d2931;
+    --status-ok-bg: #173428;
+    --status-ok-border: #2e6b50;
+    --status-ok-text: #8be0b9;
+    --status-text: #b2c0c9;
+    --subtle-bg: #11191f;
+    --surface-muted: #1c252c;
+    --surface-muted-border: #2f3d46;
+    --text: #eef4f7;
+    --text-muted: #9fb0bc;
+    --text-soft: #8ea0aa;
+    --text-secondary: #c6d3da;
+    --warn: #ffd48a;
+    --warn-bg: #332714;
+    --warn-border: #6f5523;
+    color-scheme: dark;
+  }
+}
+
 * {
   box-sizing: border-box;
 }
 
 body {
+  background: var(--page-bg);
   margin: 0;
   min-width: 320px;
 }

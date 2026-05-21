@@ -7,18 +7,21 @@ import {
   Download,
   ExternalLink,
   GitFork,
-  Info,
   KeyRound,
   Link,
   Loader2,
   MessageSquare,
+  Monitor,
+  Moon,
   Plus,
   Play,
   RotateCcw,
   ScanEye,
   Send,
+  Settings as SettingsIcon,
   Star,
   StepForward,
+  Sun,
   Usb,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -40,12 +43,13 @@ import {
 import { createOpenAiClient, type ModelConfig } from './lib/openAiClient'
 import type { PromptMode } from './lib/prompts'
 import { modelScreenshotView } from './lib/screenshotCoordinates'
-import { loadSettings, saveSettings } from './lib/settings'
+import { loadSettings, saveSettings, type ThemeMode } from './lib/settings'
 import { RunLog, type LogEntry, type LogScreenshot } from './components/RunLog'
 import { ScreenshotLightbox } from './components/ScreenshotLightbox'
 
 const REPOSITORY_URL = 'https://github.com/yeahhe365/webadb-autoglm'
 const REPOSITORY_API_URL = 'https://api.github.com/repos/yeahhe365/webadb-autoglm'
+const THEME_MODE_SEQUENCE: ThemeMode[] = ['system', 'light', 'dark']
 
 type RepositoryStats = {
   stars: number
@@ -64,6 +68,31 @@ function readRepositoryStats(value: unknown): RepositoryStats {
     forks: readNumber(record.forks_count),
     openIssues: readNumber(record.open_issues_count),
   }
+}
+
+function nextThemeMode(current: ThemeMode): ThemeMode {
+  const currentIndex = THEME_MODE_SEQUENCE.indexOf(current)
+  return THEME_MODE_SEQUENCE[(currentIndex + 1) % THEME_MODE_SEQUENCE.length]
+}
+
+function themeModeLabel(themeMode: ThemeMode) {
+  if (themeMode === 'light') {
+    return 'Light'
+  }
+  if (themeMode === 'dark') {
+    return 'Dark'
+  }
+  return 'System'
+}
+
+function ThemeModeIcon({ themeMode }: { themeMode: ThemeMode }) {
+  if (themeMode === 'light') {
+    return <Sun size={16} />
+  }
+  if (themeMode === 'dark') {
+    return <Moon size={16} />
+  }
+  return <Monitor size={16} />
 }
 
 function App() {
@@ -87,6 +116,7 @@ function App() {
   const [actionSettleMs, setActionSettleMs] = useState(settings.actionSettleMs)
   const [doubleTapIntervalMs, setDoubleTapIntervalMs] = useState(settings.doubleTapIntervalMs)
   const [keyboardStepMs, setKeyboardStepMs] = useState(settings.keyboardStepMs)
+  const [themeMode, setThemeMode] = useState(settings.themeMode)
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null)
   const [currentApp, setCurrentApp] = useState<string>('Unknown')
   const [deviceState, setDeviceState] = useState<DeviceState>({ app: 'Unknown' })
@@ -132,6 +162,7 @@ function App() {
       actionSettleMs,
       doubleTapIntervalMs,
       keyboardStepMs,
+      themeMode,
     })
   }, [
     actionSettleMs,
@@ -145,7 +176,12 @@ function App() {
     promptMode,
     streamResponses,
     task,
+    themeMode,
   ])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = themeMode
+  }, [themeMode])
 
   useEffect(() => {
     backend.setPreferAdbKeyboard(preferAdbKeyboard)
@@ -524,9 +560,19 @@ function App() {
               {currentApp}
             </span>
           </div>
-          <button type="button" className="about-button" onClick={() => setAboutOpen(true)}>
-            <Info size={16} />
-            About
+          <button
+            type="button"
+            className="theme-button"
+            onClick={() => setThemeMode((current) => nextThemeMode(current))}
+            aria-label={`Theme: ${themeModeLabel(themeMode)}`}
+            title={`Theme: ${themeModeLabel(themeMode)}`}
+          >
+            <ThemeModeIcon themeMode={themeMode} />
+            {themeModeLabel(themeMode)}
+          </button>
+          <button type="button" className="settings-button" onClick={() => setAboutOpen(true)}>
+            <SettingsIcon size={16} />
+            Settings
           </button>
         </div>
       </header>
@@ -536,20 +582,20 @@ function App() {
           className="about-page"
           role="dialog"
           aria-modal="true"
-          aria-label="About WebDroid Agent"
+          aria-label="Settings"
           onClick={() => setAboutOpen(false)}
         >
           <section className="about-panel" onClick={(event) => event.stopPropagation()}>
             <div className="about-header">
               <div>
-                <p className="eyebrow">About</p>
+                <p className="eyebrow">Settings</p>
                 <h2>WebDroid Agent</h2>
               </div>
               <button
                 type="button"
                 className="about-close"
                 onClick={() => setAboutOpen(false)}
-                aria-label="Close about page"
+                aria-label="Close settings"
               >
                 Close
               </button>
