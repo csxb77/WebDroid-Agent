@@ -33,9 +33,7 @@ describe('settings persistence', () => {
         apiKey: 'sk-test',
         model: 'custom-model',
       },
-      task: 'Open Chrome',
       maxSteps: 12,
-      autoExecute: false,
       preferAdbKeyboard: true,
       confirmSensitiveActions: false,
       streamResponses: true,
@@ -121,7 +119,7 @@ describe('settings persistence', () => {
   it('keeps the previous WebADB AutoGLM settings key as a migration fallback', () => {
     const persisted: AppSettings = {
       ...DEFAULT_SETTINGS,
-      task: 'Migrated project name task',
+      maxSteps: 12,
     }
 
     expect(
@@ -136,7 +134,7 @@ describe('settings persistence', () => {
   it('keeps old combined settings key as a migration fallback', () => {
     const persisted: AppSettings = {
       ...DEFAULT_SETTINGS,
-      task: 'Migrated task',
+      maxSteps: 24,
     }
 
     expect(

@@ -80,7 +80,8 @@ export function validateAction(candidate: unknown, screen?: ScreenSize): AgentAc
       if (text.length > 500) {
         throw new ActionValidationError('input_text is limited to 500 characters.')
       }
-      return withReason({ action, text }, candidate)
+      const clear = readOptionalBoolean(candidate, ['clear', 'clearFirst', 'replace']) ?? false
+      return withReason(clear ? { action, text, clear } : { action, text }, candidate)
     }
     case 'key': {
       const key = readString(candidate, 'key')
@@ -135,7 +136,7 @@ export function validateAction(candidate: unknown, screen?: ScreenSize): AgentAc
         optionalString(candidate, 'instruction') ??
         optionalString(candidate, 'content') ??
         'User interaction required.'
-      return withReason({ action, message }, candidate)
+      return withReason({ action: 'take_over', message }, candidate)
     }
     case 'call_api': {
       const instruction =
@@ -143,7 +144,10 @@ export function validateAction(candidate: unknown, screen?: ScreenSize): AgentAc
         optionalString(candidate, 'message') ??
         optionalString(candidate, 'content') ??
         'Summarize the recorded context.'
-      return withReason({ action, instruction }, candidate)
+      return withReason(
+        { action: 'take_over', message: `Unsupported call_api requested: ${instruction}` },
+        candidate,
+      )
     }
     case 'done': {
       const summary =
@@ -220,6 +224,10 @@ function parseFunctionValue(value: string): unknown {
       .map((part) => parseFunctionValue(part.trim()))
   }
 
+  if (/^(true|false)$/i.test(value)) {
+    return value.toLowerCase() === 'true'
+  }
+
   if (/^-?\d+(\.\d+)?$/.test(value)) {
     return Number(value)
   }
@@ -256,6 +264,28 @@ function readFirstString(record: Record<string, unknown>, keys: readonly string[
   }
 
   throw new ActionValidationError(`${keys[0]} must be a non-empty string.`)
+}
+
+function readOptionalBoolean(record: Record<string, unknown>, keys: readonly string[]) {
+  for (const key of keys) {
+    if (!(key in record)) {
+      continue
+    }
+    const value = record[key]
+    if (typeof value === 'boolean') {
+      return value
+    }
+    if (typeof value === 'string') {
+      if (/^true$/i.test(value)) {
+        return true
+      }
+      if (/^false$/i.test(value)) {
+        return false
+      }
+    }
+    throw new ActionValidationError(`${key} must be a boolean.`)
+  }
+  return undefined
 }
 
 function readString(record: Record<string, unknown>, key: string): string {

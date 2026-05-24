@@ -1,5 +1,8 @@
 import type { DeviceState, InstalledApp } from '../adapters/deviceTypes'
-import { getInstalledAppDisplayName } from '../adapters/installedApps'
+import {
+  getInstalledAppDisplayName,
+  selectInstalledAppsForPrompt,
+} from '../adapters/installedApps'
 import type { ScreenSize } from './actionTypes'
 import {
   addThreadEvent,
@@ -20,6 +23,7 @@ export type BuildAgentPromptContextInput = {
   appCard?: string
   installedApps?: readonly InstalledApp[]
   maxRecentTurns?: number
+  pendingUserMessages?: readonly string[]
 }
 
 export type BuiltAgentPromptContext = {
@@ -39,6 +43,7 @@ export function buildAgentPromptContext({
   appCard,
   installedApps,
   maxRecentTurns = 12,
+  pendingUserMessages,
 }: BuildAgentPromptContextInput): BuiltAgentPromptContext {
   const state = deviceState ?? { app: currentApp ?? 'Unknown' }
   const history = thread ? historyFromRecentTurns(thread, maxRecentTurns) : []
@@ -59,10 +64,11 @@ export function buildAgentPromptContext({
   const lines = [
     `Task: ${task}`,
     latestUserMessage ? `Latest user message: ${latestUserMessage}` : null,
+    formatPendingUserMessages(pendingUserMessages),
     thread?.contextSummary ? `<context_summary>\n${thread.contextSummary}\n</context_summary>` : null,
     `Screen Info: ${screenInfo}`,
     appCard ? `<app_card>\n${appCard}\n</app_card>` : null,
-    formatInstalledApps(installedApps),
+    formatInstalledApps(installedApps, [task, latestUserMessage, pendingUserMessages?.join('\n')].join('\n')),
     'Treat the latest user message as the current instruction. Use earlier messages, observations, and context summary only as context.',
     canonicalCoordinateInstruction,
   ].filter(Boolean) as string[]
@@ -82,10 +88,11 @@ export function buildAgentPromptContext({
 }
 
 export function historyFromRecentTurns(thread: AgentThread, maxRecentTurns = 12) {
-  if (thread.turns.length === 0) {
+  const completedTurns = thread.turns.filter(isCompletedTurn)
+  if (completedTurns.length === 0) {
     return thread.history.slice(-maxRecentTurns)
   }
-  return thread.turns.slice(-maxRecentTurns).map(turnToHistoryItem)
+  return completedTurns.slice(-maxRecentTurns).map(turnToHistoryItem)
 }
 
 export function compactThreadContext(
@@ -93,10 +100,11 @@ export function compactThreadContext(
   options: { keepRecentTurns?: number; now?: number } = {},
 ) {
   const keepRecentTurns = options.keepRecentTurns ?? 12
-  const cutoffIndex = Math.max(0, thread.turns.length - keepRecentTurns)
-  const turnsToCompact = thread.turns
-    .slice(0, cutoffIndex)
-    .filter((turn) => turn.index > thread.contextCompactedThroughStep)
+  const completedTurns = thread.turns.filter(isCompletedTurn)
+  const compactableTurns = completedTurns.slice(0, Math.max(0, completedTurns.length - keepRecentTurns))
+  const turnsToCompact = compactableTurns.filter(
+    (turn) => turn.index > thread.contextCompactedThroughStep,
+  )
 
   if (turnsToCompact.length === 0) {
     return null
@@ -131,6 +139,10 @@ function turnToHistoryItem(turn: AgentTurn): AgentHistoryItem {
   }
 }
 
+function isCompletedTurn(turn: AgentTurn) {
+  return turn.status !== 'planned'
+}
+
 function formatHistoryItem(item: AgentHistoryItem) {
   const details = [
     item.currentApp ? `app=${item.currentApp}` : null,
@@ -146,15 +158,26 @@ function formatTurnSummary(turn: AgentTurn) {
   return formatHistoryItem(turnToHistoryItem(turn))
 }
 
-function formatInstalledApps(installedApps?: readonly InstalledApp[]) {
-  const apps = installedApps?.filter((app) => app.packageName.trim()) ?? []
+function formatInstalledApps(installedApps?: readonly InstalledApp[], query = '') {
+  const apps = selectInstalledAppsForPrompt(installedApps, query)
   if (apps.length === 0) {
     return null
   }
 
-  const lines = apps
-    .slice(0, 40)
-    .map((app) => `${getInstalledAppDisplayName(app)}: ${app.packageName}`)
+  const lines = apps.map((app) => `${getInstalledAppDisplayName(app)}: ${app.packageName}`)
 
   return [`<installed_apps>`, ...lines, `</installed_apps>`].join('\n')
+}
+
+function formatPendingUserMessages(messages?: readonly string[]) {
+  const pendingMessages = messages?.map((message) => message.trim()).filter(Boolean) ?? []
+  if (pendingMessages.length === 0) {
+    return null
+  }
+
+  return [
+    '<pending_user_messages>',
+    ...pendingMessages.map((message) => `- ${message}`),
+    '</pending_user_messages>',
+  ].join('\n')
 }

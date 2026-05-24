@@ -1,8 +1,16 @@
 import {
   AlertTriangle,
+  Grid2x2,
+  KeyRound,
+  PanelLeftClose,
+  PanelLeftOpen,
   ScanEye,
   Settings as SettingsIcon,
+  Settings2,
+  SquareTerminal,
+  Stethoscope,
   Usb,
+  type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ADB_KEYBOARD_APK_URL } from './adapters/deviceCommands'
@@ -17,7 +25,7 @@ import {
   createAgentSession,
   queueUserMessage,
   recordAgentStep,
-  runAgentStep,
+  recordAgentFinalResponse,
   type AgentSession,
   type AgentStep,
 } from './lib/agent'
@@ -32,17 +40,19 @@ import type { ModelConfig } from './lib/openAiTypes'
 import {
   createIndexedDbThreadStore,
   createSettingsSnapshot,
+  type AgentThreadSummary,
 } from './lib/threadStore'
-import { APP_COPY, resolveLocale } from './lib/appCopy'
+import { APP_COPY, resolveLocale, type AppCopy } from './lib/appCopy'
 import { useBusyTask } from './hooks/useBusyTask'
 import { useDeviceBackendPreferences } from './hooks/useDeviceBackendPreferences'
 import { useDocumentPreferences } from './hooks/useDocumentPreferences'
 import { usePersistedSettings } from './hooks/usePersistedSettings'
 import { useRepositoryStats } from './hooks/useRepositoryStats'
 import { useRunLog } from './hooks/useRunLog'
-import { modelScreenshotView } from './lib/screenshotCoordinates'
+import { buildInteractionStream } from './lib/interactionStream'
+import { mapActionCoordinates, modelScreenshotView } from './lib/screenshotCoordinates'
+import { OPENAI_PROXY_URL } from './lib/openAiRuntimeConfig'
 import { loadSettings, type AppSettings } from './lib/settings'
-import { TASK_TEMPLATES } from './lib/taskTemplates'
 import { createDefaultActionToolRegistry } from './lib/toolRegistry'
 import {
   buildAgentStepTimeline,
@@ -63,26 +73,44 @@ type DeviceSnapshotUpdate = {
   screenshot: DeviceScreenshot
 }
 
+type ConfigTarget = 'model' | 'device' | 'apps' | 'commands' | 'doctor' | 'options'
+
+const CONFIG_TARGET_IDS: Record<ConfigTarget, string> = {
+  apps: 'config-installed-apps',
+  commands: 'config-direct-commands',
+  device: 'config-device',
+  doctor: 'config-doctor',
+  model: 'config-model',
+  options: 'config-device-options',
+}
+
 function App() {
   const abortRef = useRef<AbortController | null>(null)
   const settings = useMemo(() => loadSettings(), [])
   const initialSession = useMemo(() => {
-    const session = createAgentSession(settings.task)
+    const session = createAgentSession('')
     session.settingsSnapshot = createSettingsSnapshot(settings)
     return session
   }, [settings])
   const sessionRef = useRef<AgentSession>(initialSession)
   const [conversation, setConversation] = useState(() => [...initialSession.messages])
+  const [interactionItems, setInteractionItems] = useState(() =>
+    buildInteractionStream(initialSession),
+  )
   const [backend] = useState(() => new WebAdbDeviceBackend())
-  const client = useMemo(() => createOpenAiClient(), [])
+  const client = useMemo(
+    () => createOpenAiClient(globalThis.fetch, { proxyUrl: OPENAI_PROXY_URL }),
+    [],
+  )
   const actionToolRegistry = useMemo(() => createDefaultActionToolRegistry(), [])
   const threadStore = useMemo(() => createIndexedDbThreadStore(), [])
   const [threadStoreReady, setThreadStoreReady] = useState(false)
+  const [threadSummaries, setThreadSummaries] = useState<AgentThreadSummary[]>([])
+  const [activeThreadId, setActiveThreadId] = useState(initialSession.id)
+  const [historySidebarOpen, setHistorySidebarOpen] = useState(false)
   const [modelConfig, setModelConfig] = useState<ModelConfig>(settings.modelConfig)
-  const [task, setTask] = useState(settings.task)
   const [chatInput, setChatInput] = useState('')
   const [maxSteps, setMaxSteps] = useState(settings.maxSteps)
-  const [autoExecute, setAutoExecute] = useState(settings.autoExecute)
   const [preferAdbKeyboard, setPreferAdbKeyboard] = useState(settings.preferAdbKeyboard)
   const [confirmSensitiveActions, setConfirmSensitiveActions] = useState(
     settings.confirmSensitiveActions,
@@ -93,6 +121,8 @@ function App() {
   const [keyboardStepMs, setKeyboardStepMs] = useState(settings.keyboardStepMs)
   const [themeMode, setThemeMode] = useState(settings.themeMode)
   const [languageMode, setLanguageMode] = useState(settings.languageMode)
+  const [configSidebarOpen, setConfigSidebarOpen] = useState(true)
+  const [configTarget, setConfigTarget] = useState<ConfigTarget | null>(null)
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null)
   const [currentApp, setCurrentApp] = useState<string>('Unknown')
   const [deviceState, setDeviceState] = useState<DeviceState>({ app: 'Unknown' })
@@ -109,18 +139,14 @@ function App() {
 
   const connected = deviceInfo !== null
   const hasModelConfig = Boolean(modelConfig.baseUrl && modelConfig.apiKey && modelConfig.model)
-  const hasConversation = conversation.some((message) => message.role === 'user')
-  const canRun = connected && !busyTask && hasModelConfig && hasConversation
   const displayedScreenshot = screenshot ? modelScreenshotView(screenshot) : null
   const activeLocale = useMemo(() => resolveLocale(languageMode), [languageMode])
   const copy = APP_COPY[activeLocale]
-  const taskTemplates = TASK_TEMPLATES[activeLocale]
+  const copyRef = useRef(copy)
   const currentSettings = useMemo<AppSettings>(
     () => ({
       modelConfig,
-      task,
       maxSteps,
-      autoExecute,
       preferAdbKeyboard,
       confirmSensitiveActions,
       streamResponses,
@@ -132,7 +158,6 @@ function App() {
     }),
     [
       actionSettleMs,
-      autoExecute,
       confirmSensitiveActions,
       doubleTapIntervalMs,
       keyboardStepMs,
@@ -141,7 +166,6 @@ function App() {
       modelConfig,
       preferAdbKeyboard,
       streamResponses,
-      task,
       themeMode,
     ],
   )
@@ -155,38 +179,70 @@ function App() {
   usePersistedSettings(currentSettings)
 
   useEffect(() => {
+    copyRef.current = copy
+  }, [copy])
+
+  useEffect(() => {
+    if (!configSidebarOpen || !configTarget) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const element = document.getElementById(CONFIG_TARGET_IDS[configTarget])
+      if (element instanceof HTMLDetailsElement) {
+        element.open = true
+      }
+      if (element && typeof element.scrollIntoView === 'function') {
+        element.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      }
+      setConfigTarget(null)
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [configSidebarOpen, configTarget])
+
+  useEffect(() => {
     let cancelled = false
 
-    void threadStore
-      .loadLatest()
-      .then((restoredThread) => {
-        if (cancelled || !restoredThread) {
-          return
+    void (async () => {
+      try {
+        const restoredThread = await threadStore.loadLatest()
+        if (!cancelled && restoredThread) {
+          sessionRef.current = restoredThread
+          applySessionState(restoredThread)
+          addLog({
+            tone: 'info',
+            title: copyRef.current.agentContextRestored,
+            detail: restoredThread.title,
+            screenshot: toLogScreenshot(
+              restoredThread.lastScreenshot ?? restoredThread.deviceSnapshot?.screenshot,
+            ),
+          })
         }
-
-        sessionRef.current = restoredThread
-        applySessionState(restoredThread)
-        addLog({
-          tone: 'info',
-          title: 'Agent context restored',
-          detail: restoredThread.title,
-          screenshot: toLogScreenshot(
-            restoredThread.lastScreenshot ?? restoredThread.deviceSnapshot?.screenshot,
-          ),
-        })
-      })
-      .catch((caught) => {
+      } catch (caught) {
         if (cancelled) {
           return
         }
         const message = caught instanceof Error ? caught.message : String(caught)
-        addLog({ tone: 'warn', title: 'Agent context restore skipped', detail: message })
-      })
-      .finally(() => {
+        addLog({ tone: 'warn', title: copyRef.current.agentContextRestoreSkipped, detail: message })
+      }
+
+      try {
+        const summaries = await threadStore.list()
+        if (!cancelled) {
+          applyThreadSummaries(summaries)
+        }
+      } catch (caught) {
+        if (!cancelled) {
+          const message = caught instanceof Error ? caught.message : String(caught)
+          addLog({ tone: 'warn', title: copyRef.current.agentContextRestoreSkipped, detail: message })
+        }
+      } finally {
         if (!cancelled) {
           setThreadStoreReady(true)
         }
-      })
+      }
+    })()
 
     return () => {
       cancelled = true
@@ -197,8 +253,7 @@ function App() {
     if (!threadStoreReady) {
       return
     }
-    sessionRef.current.settingsSnapshot = createSettingsSnapshot(currentSettings)
-    void threadStore.save(sessionRef.current)
+    persistSession()
   }, [currentSettings, threadStore, threadStoreReady])
 
   function updateConfig<Key extends keyof ModelConfig>(key: Key, value: ModelConfig[Key]) {
@@ -227,7 +282,7 @@ function App() {
   function logScreenCapture(nextScreenshot: DeviceScreenshot, nextDeviceState: DeviceState) {
     addLog({
       tone: 'ok',
-      title: 'Screen captured',
+      title: copy.screenCaptured,
       detail: formatScreenCaptureDetail(nextScreenshot, nextDeviceState),
       screenshot: toLogScreenshot(nextScreenshot),
     })
@@ -237,9 +292,28 @@ function App() {
     return sessionRef.current
   }
 
+  function applyThreadSummaries(summaries: AgentThreadSummary[]) {
+    setThreadSummaries(summaries.filter(isVisibleThreadSummary))
+  }
+
+  function refreshThreadSummaries() {
+    if (!threadStoreReady) {
+      return
+    }
+
+    void threadStore
+      .list()
+      .then(applyThreadSummaries)
+      .catch((caught) => {
+        const message = caught instanceof Error ? caught.message : String(caught)
+        addLog({ tone: 'warn', title: copyRef.current.agentContextRestoreSkipped, detail: message })
+      })
+  }
+
   function applySessionState(session: AgentSession) {
+    setActiveThreadId(session.id)
     setConversation([...session.messages])
-    setTask(session.task)
+    setInteractionItems(buildInteractionStream(session))
     setCurrentApp(session.currentApp)
     setDeviceState(session.deviceState)
     setScreenshot(session.lastScreenshot ?? session.deviceSnapshot?.screenshot ?? null)
@@ -249,8 +323,19 @@ function App() {
     if (!threadStoreReady) {
       return
     }
+    if (!sessionHasHistoryContent(session)) {
+      refreshThreadSummaries()
+      return
+    }
     session.settingsSnapshot = createSettingsSnapshot(currentSettings)
-    void threadStore.save(session)
+    void threadStore
+      .save(session)
+      .then(() => threadStore.list())
+      .then(applyThreadSummaries)
+      .catch((caught) => {
+        const message = caught instanceof Error ? caught.message : String(caught)
+        addLog({ tone: 'warn', title: copyRef.current.agentContextRestoreSkipped, detail: message })
+      })
   }
 
   function syncConversation() {
@@ -258,25 +343,67 @@ function App() {
     persistSession()
   }
 
-  function resetSession() {
-    sessionRef.current = createAgentSession(task)
-    sessionRef.current.settingsSnapshot = createSettingsSnapshot(currentSettings)
-    setPendingStep(null)
-    syncConversation()
-    addLog({ tone: 'info', title: 'Agent context reset' })
-  }
-
   function startNewChat() {
     sessionRef.current = createAgentSession('')
     sessionRef.current.settingsSnapshot = createSettingsSnapshot(currentSettings)
     setChatInput('')
     setPendingStep(null)
+    setHistorySidebarOpen(false)
     syncConversation()
-    addLog({ tone: 'info', title: 'New chat started' })
+    addLog({ tone: 'info', title: copy.newChatStarted })
   }
 
-  function applyTaskTemplate(prompt: string) {
-    setChatInput(prompt)
+  async function selectHistoryThread(threadId: string) {
+    if (busyTask) {
+      return
+    }
+
+    try {
+      const selectedThread = await threadStore.load(threadId)
+      if (!selectedThread) {
+        refreshThreadSummaries()
+        return
+      }
+
+      sessionRef.current = selectedThread
+      setChatInput('')
+      setPendingStep(null)
+      setHistorySidebarOpen(false)
+      applySessionState(selectedThread)
+      addLog({
+        tone: 'info',
+        title: copy.agentContextRestored,
+        detail: selectedThread.title,
+        screenshot: toLogScreenshot(
+          selectedThread.lastScreenshot ?? selectedThread.deviceSnapshot?.screenshot,
+        ),
+      })
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught)
+      addLog({ tone: 'warn', title: copy.agentContextRestoreSkipped, detail: message })
+    }
+  }
+
+  async function deleteHistoryThread(threadId: string) {
+    if (busyTask) {
+      return
+    }
+
+    try {
+      await threadStore.delete(threadId)
+      if (threadId === sessionRef.current.id) {
+        sessionRef.current = createAgentSession('')
+        sessionRef.current.settingsSnapshot = createSettingsSnapshot(currentSettings)
+        setChatInput('')
+        setPendingStep(null)
+        applySessionState(sessionRef.current)
+      }
+      const summaries = await threadStore.list()
+      applyThreadSummaries(summaries)
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught)
+      addLog({ tone: 'warn', title: copy.agentContextRestoreSkipped, detail: message })
+    }
   }
 
   function confirmSensitiveAction(message: string) {
@@ -295,43 +422,11 @@ function App() {
     )
   }
 
-  function exportRunLog() {
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      device: deviceInfo,
-      currentApp,
-      deviceState,
-      model: {
-        ...modelConfig,
-        apiKey: modelConfig.apiKey ? '<redacted>' : '',
-      },
-      streamResponses,
-      timing: {
-        actionSettleMs,
-        doubleTapIntervalMs,
-        keyboardStepMs,
-      },
-      autoExecute,
-      maxSteps,
-      task,
-      session: sessionRef.current,
-      logs,
-    }
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `webdroid-agent-run-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
-    anchor.click()
-    URL.revokeObjectURL(url)
-    addLog({ tone: 'ok', title: 'Run log exported' })
-  }
-
   async function connectDevice() {
-    await runTask('connect-device', 'Connect device', async () => {
+    await runTask('connect-device', copy.connectDeviceTask, async () => {
       const info = await backend.connect()
       setDeviceInfo(info)
-      addLog({ tone: 'ok', title: 'Device connected', detail: `${info.name} (${info.serial})` })
+      addLog({ tone: 'ok', title: copy.deviceConnected, detail: `${info.name} (${info.serial})` })
       const { screenshot: nextScreenshot, deviceState: nextDeviceState } =
         await refreshDisplayedSnapshot()
       logScreenCapture(nextScreenshot, nextDeviceState)
@@ -340,7 +435,7 @@ function App() {
   }
 
   async function disconnectDevice() {
-    await runTask('disconnect-device', 'Disconnect device', async () => {
+    await runTask('disconnect-device', copy.disconnectDeviceTask, async () => {
       await backend.disconnect()
       setDeviceInfo(null)
       setCurrentApp('Unknown')
@@ -349,12 +444,12 @@ function App() {
       setDoctorResults([])
       setScreenshot(null)
       setPendingStep(null)
-      addLog({ tone: 'info', title: 'Device disconnected' })
+      addLog({ tone: 'info', title: copy.deviceDisconnected })
     })
   }
 
   async function captureScreen() {
-    await runTask('capture-screen', 'Capture screen', async () => {
+    await runTask('capture-screen', copy.captureScreenTask, async () => {
       const { screenshot: nextScreenshot, deviceState: nextDeviceState } =
         await refreshDisplayedSnapshot()
       logScreenCapture(nextScreenshot, nextDeviceState)
@@ -374,28 +469,27 @@ function App() {
     }
   }
 
-  async function enableAdbKeyboard() {
-    await runTask('enable-adb-keyboard', 'Enable ADB Keyboard', async () => {
-      const result = await backend.enableAdbKeyboard()
-      setPreferAdbKeyboard(true)
-      addLog({ tone: 'ok', title: 'ADB Keyboard enabled', detail: result })
-    })
-  }
+  async function configureAdbKeyboard() {
+    await runTask('configure-adb-keyboard', copy.configureTextInput, async () => {
+      const inputMethods = await backend.getInputMethods().catch(() => '')
+      const adbKeyboardInstalled = /adbkeyboard/i.test(inputMethods)
+      const details: string[] = []
 
-  async function installAdbKeyboard() {
-    await runTask('install-adb-keyboard', copy.installAdbKeyboard, async () => {
-      if (typeof fetch !== 'function') {
-        throw new Error('This browser cannot download the ADB Keyboard APK.')
+      if (!adbKeyboardInstalled) {
+        if (typeof fetch !== 'function') {
+          throw new Error(copy.noAdbKeyboardDownloadSupport)
+        }
+
+        const response = await fetch(ADB_KEYBOARD_APK_URL)
+        if (!response.ok) {
+          throw new Error(copy.failedToDownloadAdbKeyboard(response.status))
+        }
+
+        const apkBytes = new Uint8Array(await response.arrayBuffer())
+        details.push(await backend.installAdbKeyboard(apkBytes))
       }
 
-      const response = await fetch(ADB_KEYBOARD_APK_URL)
-      if (!response.ok) {
-        throw new Error(`Failed to download ADB Keyboard APK: HTTP ${response.status}.`)
-      }
-
-      const apkBytes = new Uint8Array(await response.arrayBuffer())
-      const installResult = await backend.installAdbKeyboard(apkBytes)
-      const enableResult = await backend.enableAdbKeyboard()
+      details.push(await backend.enableAdbKeyboard())
       setPreferAdbKeyboard(true)
       const nextDeviceState = await backend.getDeviceState().catch(() => null)
       if (nextDeviceState) {
@@ -404,8 +498,8 @@ function App() {
       }
       addLog({
         tone: 'ok',
-        title: copy.adbKeyboardInstalled,
-        detail: [installResult, enableResult].filter(Boolean).join('\n'),
+        title: copy.adbKeyboardConfigured,
+        detail: details.filter(Boolean).join('\n'),
       })
     })
   }
@@ -445,6 +539,14 @@ function App() {
     })
   }
 
+  function runScreenshotAction(action: AgentAction) {
+    const executionAction =
+      screenshot && displayedScreenshot
+        ? mapActionCoordinates(action, displayedScreenshot.screen, screenshot.screen)
+        : action
+    void runDirectAction(executionAction)
+  }
+
   function launchInstalledApp(app: InstalledApp) {
     void runDirectAction({
       action: 'launch',
@@ -458,40 +560,21 @@ function App() {
     backend.setPreferAdbKeyboard(value)
   }
 
-  async function planNextStep() {
-    await runTask('plan-next-step', 'Plan next action', async () => {
-      const session = ensureSession()
-      const step = await runAgentStep({
-        device: backend,
-        client,
-        modelConfig: { ...modelConfig, stream: streamResponses },
-        task: session.task,
-        session,
-        index: session.history.length + 1,
-        onSnapshot: applyDeviceSnapshot,
-      })
-      applyDeviceSnapshot(step)
-      setPendingStep(step)
-      syncConversation()
-      addLog({
-        tone: 'info',
-        title: `Step ${step.index}: ${step.preview}`,
-        detail: formatAgentStepDetail(step),
-        screenshot: toLogScreenshot(step.screenshot),
-        timeline: buildAgentStepTimeline(step),
-      })
-    })
-  }
-
   async function executePendingStep() {
     if (!pendingStep) {
       return
     }
 
-    await runTask('execute-action', 'Execute action', async () => {
+    await runTask('execute-action', copy.executeActionTask, async () => {
       if (pendingStep.action.action === 'done') {
         recordAgentStep(ensureSession(), pendingStep)
-        addLog({ tone: 'ok', title: 'Task complete', detail: pendingStep.action.summary })
+        const finalResponse = await recordAgentFinalResponse({
+          client,
+          modelConfig: { ...modelConfig, stream: streamResponses },
+          session: ensureSession(),
+          task: ensureSession().task,
+        })
+        addLog({ tone: 'ok', title: copy.taskComplete, detail: finalResponse })
         setPendingStep(null)
         syncConversation()
         return
@@ -500,11 +583,19 @@ function App() {
       const result = await actionToolRegistry.execute(pendingStep.executionAction, {
         device: backend,
         confirmSensitiveAction,
+        safetyContext: {
+          task: ensureSession().task,
+          currentApp: pendingStep.currentApp,
+          deviceState: pendingStep.deviceState,
+          modelOutput: pendingStep.modelOutput,
+        },
       })
       recordAgentStep(ensureSession(), pendingStep, result.summary, result.success)
       addLog({
         tone: result.success ? 'ok' : 'error',
-        title: result.success ? `Executed ${pendingStep.preview}` : `Failed ${pendingStep.preview}`,
+        title: result.success
+          ? copy.executedAction(pendingStep.preview)
+          : copy.failedAction(pendingStep.preview),
         detail: result.summary,
         screenshot: toLogScreenshot(pendingStep.screenshot),
         timeline: buildAgentStepTimeline(pendingStep, result.summary),
@@ -519,66 +610,81 @@ function App() {
   }
 
   async function runAutoLoop() {
-    const controller = new AbortController()
-    abortRef.current = controller
     const session = ensureSession()
+    const abortController = new AbortController()
+    abortRef.current = abortController
 
-    await runTask('run-agent', 'Run agent', async () => {
-      const runner = createAgentRunner({ device: backend, client, toolRegistry: actionToolRegistry })
-      const result = await runner.run({
-        modelConfig: { ...modelConfig, stream: streamResponses },
-        task: session.task,
-        autoExecute: true,
-        maxSteps,
-        session,
-        signal: controller.signal,
-        confirmSensitiveAction,
-        onSnapshot: applyDeviceSnapshot,
-        onStep: (step) => {
-          applyDeviceSnapshot(step)
-          setPendingStep(step.action.action === 'done' ? null : step)
-          addLog({
-            tone: 'info',
-            title: `Step ${step.index}: ${step.preview}`,
-            detail: formatAgentStepDetail(step),
-            screenshot: toLogScreenshot(step.screenshot),
-            timeline: buildAgentStepTimeline(step),
-          })
-          syncConversation()
-        },
-        onExecuted: async (step, commandResult) => {
-          addLog({
-            tone: 'ok',
-            title: `Executed ${step.preview}`,
-            detail: commandResult,
-            screenshot: toLogScreenshot(step.screenshot),
-            timeline: buildAgentStepTimeline(step, commandResult),
-          })
-          await refreshDisplayedSnapshot()
-          syncConversation()
-        },
-      })
+    await runTask('run-agent', copy.runAgentTask, async () => {
+      try {
+        const runner = createAgentRunner({ device: backend, client, toolRegistry: actionToolRegistry })
+        const result = await runner.run({
+          modelConfig: { ...modelConfig, stream: streamResponses },
+          task: session.task,
+          autoExecute: true,
+          maxSteps,
+          session,
+          signal: abortController.signal,
+          confirmSensitiveAction,
+          onSnapshot: applyDeviceSnapshot,
+          onStep: (step) => {
+            applyDeviceSnapshot(step)
+            setPendingStep(step.action.action === 'done' ? null : step)
+            addLog({
+              tone: 'info',
+              title: copy.stepPreview(step.index, step.preview),
+              detail: formatAgentStepDetail(step),
+              screenshot: toLogScreenshot(step.screenshot),
+              timeline: buildAgentStepTimeline(step),
+            })
+            syncConversation()
+          },
+          onExecuted: async (step, commandResult) => {
+            addLog({
+              tone: 'ok',
+              title: copy.executedAction(step.preview),
+              detail: commandResult,
+              screenshot: toLogScreenshot(step.screenshot),
+              timeline: buildAgentStepTimeline(step, commandResult),
+            })
+            await refreshDisplayedSnapshot()
+            syncConversation()
+          },
+        })
 
-      if (result.status === 'done') {
-        addLog({ tone: 'ok', title: 'Task complete' })
+        if (result.status === 'done') {
+          addLog({ tone: 'ok', title: copy.taskComplete, detail: result.finalResponse })
+        }
+        if (result.status === 'max_steps') {
+          addLog({ tone: 'warn', title: copy.maxStepsReached, detail: `${maxSteps} steps` })
+        }
+        if (result.status === 'stopped') {
+          addLog({ tone: 'warn', title: copy.runStopped })
+        }
+        if (result.status === 'awaiting_takeover') {
+          addLog({ tone: 'warn', title: copy.manualTakeoverRequested })
+        }
+        if (result.status === 'loop_guard') {
+          addLog({ tone: 'warn', title: copy.loopGuardStopped, detail: result.reason })
+        }
+        if (result.status !== 'awaiting_takeover') {
+          setPendingStep(null)
+        }
+        syncConversation()
+      } finally {
+        if (abortRef.current === abortController) {
+          abortRef.current = null
+        }
       }
-      if (result.status === 'max_steps') {
-        addLog({ tone: 'warn', title: 'Max steps reached', detail: `${maxSteps} steps` })
-      }
-      if (result.status === 'stopped') {
-        addLog({ tone: 'warn', title: 'Run stopped' })
-      }
-      if (result.status === 'awaiting_takeover') {
-        addLog({ tone: 'warn', title: 'Manual takeover requested' })
-      }
-      if (result.status === 'loop_guard') {
-        addLog({ tone: 'warn', title: 'Loop guard stopped the run', detail: result.reason })
-      }
-      if (result.status !== 'awaiting_takeover') {
-        setPendingStep(null)
-      }
-      syncConversation()
     })
+  }
+
+  function stopCurrentRun() {
+    abortRef.current?.abort()
+  }
+
+  function openConfigTarget(target: ConfigTarget) {
+    setConfigSidebarOpen(true)
+    setConfigTarget(target)
   }
 
   async function submitChatMessage() {
@@ -593,28 +699,19 @@ function App() {
     if (busyTask) {
       queueUserMessage(session, message)
       syncConversation()
-      addLog({ tone: 'info', title: 'User message queued', detail: message })
+      addLog({ tone: 'info', title: copy.userMessageQueued, detail: message })
       return
     }
 
     addUserMessage(session, message)
     syncConversation()
-    addLog({ tone: 'info', title: 'User message', detail: message })
+    addLog({ tone: 'info', title: copy.userMessage, detail: message })
 
     if (!connected || !hasModelConfig) {
       return
     }
 
-    if (autoExecute) {
-      await runAutoLoop()
-    } else {
-      await planNextStep()
-    }
-  }
-
-  function stopRun() {
-    abortRef.current?.abort()
-    addLog({ tone: 'warn', title: 'Stop requested' })
+    await runAutoLoop()
   }
 
   return (
@@ -639,9 +736,14 @@ function App() {
               {copy.currentApp}: {currentApp}
             </span>
           </div>
-          <button type="button" className="settings-button" onClick={() => setSettingsOpen(true)}>
+          <button
+            type="button"
+            className="settings-button"
+            aria-label={copy.settings}
+            onClick={() => setSettingsOpen(true)}
+          >
             <SettingsIcon size={16} />
-            {copy.settings}
+            <span className="settings-button-label">{copy.settings}</span>
           </button>
         </div>
       </header>
@@ -668,95 +770,215 @@ function App() {
         </div>
       ) : null}
 
-      <section className="workspace">
-        <aside className="panel config-panel">
-          <ModelPanel
-            copy={copy}
-            modelConfig={modelConfig}
-            onModelConfigChange={updateConfig}
-            onStreamResponsesChange={setStreamResponses}
-            streamResponses={streamResponses}
-          />
+      <section
+        className={
+          configSidebarOpen ? 'workspace' : 'workspace workspace-config-collapsed'
+        }
+      >
+        <aside
+          aria-label={copy.configurationPanel}
+          className={
+            configSidebarOpen
+              ? 'panel config-panel config-panel-expanded'
+              : 'panel config-panel config-panel-collapsed'
+          }
+        >
+          <div className="config-sidebar-header">
+            {configSidebarOpen ? (
+              <span className="config-sidebar-title">{copy.configurationPanel}</span>
+            ) : null}
+            <button
+              type="button"
+              className="icon-button config-sidebar-toggle"
+              aria-expanded={configSidebarOpen}
+              aria-label={
+                configSidebarOpen
+                  ? copy.collapseConfigurationPanel
+                  : copy.expandConfigurationPanel
+              }
+              title={
+                configSidebarOpen
+                  ? copy.collapseConfigurationPanel
+                  : copy.expandConfigurationPanel
+              }
+              onClick={() => setConfigSidebarOpen((current) => !current)}
+            >
+              {configSidebarOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}
+            </button>
+          </div>
 
-          <DevicePanel
-            actionSettleMs={actionSettleMs}
-            busyTask={busyTask}
-            connected={connected}
-            copy={copy}
-            currentApp={currentApp}
-            deviceInfo={deviceInfo}
-            doctorResults={doctorResults}
-            deviceState={deviceState}
-            doubleTapIntervalMs={doubleTapIntervalMs}
-            installedApps={installedApps}
-            keyboardStepMs={keyboardStepMs}
-            onActionSettleMsChange={setActionSettleMs}
-            onCaptureScreen={captureScreen}
-            onConfirmSensitiveActionsChange={setConfirmSensitiveActions}
-            onConnectDevice={connectDevice}
-            onDisconnectDevice={disconnectDevice}
-            onDoubleTapIntervalMsChange={setDoubleTapIntervalMs}
-            onEnableAdbKeyboard={enableAdbKeyboard}
-            onInstallAdbKeyboard={installAdbKeyboard}
-            onKeyboardStepMsChange={setKeyboardStepMs}
-            onLaunchInstalledApp={launchInstalledApp}
-            onPreferAdbKeyboardChange={toggleAdbKeyboard}
-            onRunDirectAction={runDirectAction}
-            onRunDoctor={runDoctor}
-            preferAdbKeyboard={preferAdbKeyboard}
-            confirmSensitiveActions={confirmSensitiveActions}
-          />
+          {configSidebarOpen ? (
+            <div className="config-panel-content">
+              <section
+                className="config-panel-group"
+                id={CONFIG_TARGET_IDS.model}
+                aria-label={copy.model}
+              >
+                <ModelPanel
+                  copy={copy}
+                  modelConfig={modelConfig}
+                  onModelConfigChange={updateConfig}
+                  onStreamResponsesChange={setStreamResponses}
+                  streamResponses={streamResponses}
+                />
+              </section>
+
+              <DevicePanel
+                actionSettleMs={actionSettleMs}
+                busyTask={busyTask}
+                connected={connected}
+                copy={copy}
+                currentApp={currentApp}
+                deviceInfo={deviceInfo}
+                deviceSectionId={CONFIG_TARGET_IDS.device}
+                doctorResults={doctorResults}
+                doctorSectionId={CONFIG_TARGET_IDS.doctor}
+                deviceState={deviceState}
+                deviceOptionsSectionId={CONFIG_TARGET_IDS.options}
+                directCommandsSectionId={CONFIG_TARGET_IDS.commands}
+                doubleTapIntervalMs={doubleTapIntervalMs}
+                installedApps={installedApps}
+                installedAppsSectionId={CONFIG_TARGET_IDS.apps}
+                keyboardStepMs={keyboardStepMs}
+                onActionSettleMsChange={setActionSettleMs}
+                onCaptureScreen={captureScreen}
+                onConfirmSensitiveActionsChange={setConfirmSensitiveActions}
+                onConnectDevice={connectDevice}
+                onDisconnectDevice={disconnectDevice}
+                onDoubleTapIntervalMsChange={setDoubleTapIntervalMs}
+                onConfigureAdbKeyboard={configureAdbKeyboard}
+                onKeyboardStepMsChange={setKeyboardStepMs}
+                onLaunchInstalledApp={launchInstalledApp}
+                onPreferAdbKeyboardChange={toggleAdbKeyboard}
+                onRunDirectAction={runDirectAction}
+                onRunDoctor={runDoctor}
+                preferAdbKeyboard={preferAdbKeyboard}
+                confirmSensitiveActions={confirmSensitiveActions}
+              />
+            </div>
+          ) : (
+            <ConfigRail
+              copy={copy}
+              items={[
+                { icon: KeyRound, label: copy.model, target: 'model' },
+                { icon: Usb, label: copy.device, target: 'device' },
+                { icon: Grid2x2, label: copy.installedApps, target: 'apps' },
+                { icon: SquareTerminal, label: copy.directCommands, target: 'commands' },
+                { icon: Stethoscope, label: copy.runDoctor, target: 'doctor' },
+                { icon: Settings2, label: copy.deviceOptions, target: 'options' },
+              ]}
+              onSelect={openConfigTarget}
+            />
+          )}
         </aside>
 
         <PhoneStage
           copy={copy}
           displayedScreenshot={displayedScreenshot}
-          onRunInteractiveAction={runDirectAction}
+          onRunInteractiveAction={runScreenshotAction}
           pendingStep={pendingStep}
         />
 
         <aside className="panel run-panel">
           <RunPanel
-            autoExecute={autoExecute}
+            activeThreadId={activeThreadId}
             busyTask={busyTask}
-            canRun={canRun}
             chatInput={chatInput}
             conversation={conversation}
+            interactionItems={interactionItems}
             copy={copy}
-            logsCount={logs.length}
-            onAutoExecuteChange={setAutoExecute}
+            historySidebarOpen={historySidebarOpen}
             onChatInputChange={setChatInput}
+            onCloseHistorySidebar={() => setHistorySidebarOpen(false)}
+            onDeleteThread={(threadId) => {
+              void deleteHistoryThread(threadId)
+            }}
             onExecutePendingStep={executePendingStep}
-            onExportRunLog={exportRunLog}
-            onPlanNextStep={planNextStep}
-            onResetSession={resetSession}
-            onRunAutoLoop={runAutoLoop}
+            onSelectThread={(threadId) => {
+              void selectHistoryThread(threadId)
+            }}
             onStartNewChat={startNewChat}
-            onStopRun={stopRun}
+            onStopRun={stopCurrentRun}
             onSubmitChatMessage={submitChatMessage}
-            onTaskTemplateSelect={applyTaskTemplate}
+            onToggleHistorySidebar={() => setHistorySidebarOpen((current) => !current)}
             pendingStep={pendingStep}
-            taskTemplates={taskTemplates}
+            threadSummaries={threadSummaries}
           />
         </aside>
       </section>
 
-      <RunLog
-        logs={logs}
-        onClear={clearLogs}
-        labels={{
-          clear: copy.clear,
-          empty: copy.noEvents,
-          title: copy.runLog,
-          closeScreenshotPreview: copy.closeScreenshotPreview,
-          openScreenshotFor: copy.openScreenshotFor,
-          screenshotDialogFor: copy.screenshotDialogFor,
-          screenshotFor: (title) => `${copy.androidScreenshot}: ${title}`,
-          expandedScreenshotFor: (title) => `${copy.expandedAndroidScreenshot}: ${title}`,
-        }}
-      />
+      <details className="log-drawer compact-section">
+        <summary>
+          <span>{copy.runLog}</span>
+          <small>{logs[0]?.title ?? copy.noEvents}</small>
+        </summary>
+        <RunLog
+          logs={logs}
+          onClear={clearLogs}
+          labels={{
+            clear: copy.clear,
+            empty: copy.noEvents,
+            title: copy.runLog,
+            closeScreenshotPreview: copy.closeScreenshotPreview,
+            openScreenshotFor: copy.openScreenshotFor,
+            screenshotDialogFor: copy.screenshotDialogFor,
+            screenshotFor: (title) => `${copy.androidScreenshot}: ${title}`,
+            expandedScreenshotFor: (title) => `${copy.expandedAndroidScreenshot}: ${title}`,
+          }}
+        />
+      </details>
     </main>
   )
 }
 
 export default App
+
+type ConfigRailItem = {
+  icon: LucideIcon
+  label: string
+  target: ConfigTarget
+}
+
+function ConfigRail({
+  copy,
+  items,
+  onSelect,
+}: {
+  copy: AppCopy
+  items: ConfigRailItem[]
+  onSelect: (target: ConfigTarget) => void
+}) {
+  return (
+    <nav className="config-rail" aria-label={copy.configurationPanel}>
+      {items.map(({ icon: Icon, label, target }) => (
+        <button
+          type="button"
+          className="config-rail-button"
+          key={target}
+          aria-label={copy.openConfigurationSection(label)}
+          title={label}
+          onClick={() => onSelect(target)}
+        >
+          <Icon size={18} />
+        </button>
+      ))}
+    </nav>
+  )
+}
+
+function sessionHasHistoryContent(session: AgentSession) {
+  return (
+    session.task.trim().length > 0 ||
+    session.messages.length > 0 ||
+    session.turns.length > 0 ||
+    session.history.length > 0
+  )
+}
+
+function isVisibleThreadSummary(summary: AgentThreadSummary) {
+  return (
+    summary.task.trim().length > 0 ||
+    summary.status !== 'idle' ||
+    summary.createdAt !== summary.updatedAt
+  )
+}

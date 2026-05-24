@@ -57,14 +57,14 @@ describe('parseModelAction', () => {
     })
   })
 
-  it('parses Open-AutoGLM Interact and Call_API actions', () => {
+  it('normalizes Open-AutoGLM Interact and Call_API actions to takeover', () => {
     expect(parseModelAction('do(action="Interact", message="请选择联系人")', screen)).toEqual({
-      action: 'interact',
+      action: 'take_over',
       message: '请选择联系人',
     })
     expect(parseModelAction('do(action="Call_API", instruction="总结已记录页面")', screen)).toEqual({
-      action: 'call_api',
-      instruction: '总结已记录页面',
+      action: 'take_over',
+      message: 'Unsupported call_api requested: 总结已记录页面',
     })
   })
 })
@@ -99,6 +99,25 @@ describe('validateAction', () => {
     expect(() => validateAction({ action: 'input_text', text: 'hello\nworld' }, screen)).toThrow(
       'control characters',
     )
+  })
+
+  it('accepts clear-before-type input actions', () => {
+    expect(validateAction({ action: 'input_text', text: 'hello', clear: true }, screen)).toEqual({
+      action: 'input_text',
+      text: 'hello',
+      clear: true,
+    })
+    expect(parseModelAction('do(action="Type", text="hello", clear=True)', screen)).toEqual({
+      action: 'input_text',
+      text: 'hello',
+      clear: true,
+    })
+  })
+
+  it('rejects non-boolean input clear values', () => {
+    expect(() =>
+      validateAction({ action: 'input_text', text: 'hello', clear: 'yes' }, screen),
+    ).toThrow('clear must be a boolean')
   })
 
   it('rejects unsupported action names', () => {
@@ -189,6 +208,9 @@ describe('buildActionPreview', () => {
 
   it('formats launch and takeover actions', () => {
     expect(buildActionPreview({ action: 'launch', app: 'Settings' })).toBe('launch Settings')
+    expect(buildActionPreview({ action: 'input_text', text: 'query', clear: true })).toBe(
+      'replace text with "query"',
+    )
     expect(buildActionPreview({ action: 'take_over', message: 'captcha' })).toBe(
       'take over: captcha',
     )

@@ -2,6 +2,7 @@ const APP_PACKAGE_BY_ALIAS: Record<string, string> = {
   // English and romanized aliases.
   alipay: 'com.eg.android.AlipayGphone',
   amazon: 'com.amazon.mShop.android.shopping',
+  bili: 'tv.danmaku.bili',
   bilibili: 'tv.danmaku.bili',
   calendar: 'com.google.android.calendar',
   calculator: 'com.google.android.calculator',
@@ -58,6 +59,9 @@ const APP_PACKAGE_BY_ALIAS: Record<string, string> = {
   微信: 'com.tencent.mm',
   淘宝: 'com.taobao.taobao',
   支付宝: 'com.eg.android.AlipayGphone',
+  b站: 'tv.danmaku.bili',
+  哔哩: 'tv.danmaku.bili',
+  哔哩哔哩: 'tv.danmaku.bili',
   抖音: 'com.ss.android.ugc.aweme',
   小红书: 'com.xingin.xhs',
   拼多多: 'com.xunmeng.pinduoduo',
@@ -80,6 +84,7 @@ const APP_DISPLAY_NAME_BY_PACKAGE: Record<string, string> = {
   'com.android.chrome': 'chrome',
   'com.autonavi.minimap': '高德地图',
   'com.baidu.BaiduMap': '百度地图',
+  'com.bilibili.app.in': 'bilibili',
   'com.coloros.gallery3d': '相册',
   'com.ebay.mobile': 'ebay',
   'com.eg.android.AlipayGphone': '支付宝',
@@ -112,7 +117,14 @@ const APP_DISPLAY_NAME_BY_PACKAGE: Record<string, string> = {
   'com.zhiliaoapp.musically': 'tiktok',
   'me.ele': '饿了么',
   'org.telegram.messenger': 'telegram',
-  'tv.danmaku.bili': 'bilibili',
+  'tv.danmaku.bili': '哔哩哔哩',
+  'tv.danmaku.bilibilihd': '哔哩哔哩HD',
+}
+
+const APP_EXTRA_ALIASES_BY_PACKAGE: Record<string, string[]> = {
+  'com.bilibili.app.in': ['bili', 'bilibili', 'B站', '哔哩', '哔哩哔哩'],
+  'tv.danmaku.bili': ['bili', 'bilibili', 'B站', '哔哩', '哔哩哔哩'],
+  'tv.danmaku.bilibilihd': ['bili', 'bilibili', 'B站', '哔哩', '哔哩哔哩', '哔哩哔哩HD'],
 }
 
 const ANDROID_PACKAGE_NAME_PATTERN = /^[a-z][a-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$/
@@ -139,6 +151,10 @@ export function resolveAppAliasesFromPackage(packageName: string) {
   const displayName = resolveAppNameFromPackage(packageName)
   if (displayName) {
     aliases.add(displayName)
+  }
+
+  for (const alias of APP_EXTRA_ALIASES_BY_PACKAGE[packageName] ?? []) {
+    aliases.add(alias)
   }
 
   for (const [alias, candidatePackage] of Object.entries(APP_PACKAGE_BY_ALIAS)) {

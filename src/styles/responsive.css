@@ -1,6 +1,6 @@
 @media (max-width: 1120px) {
   .app-shell {
-    padding: 16px;
+    padding: 14px 16px 16px;
   }
 
   .timing-grid {
@@ -18,19 +18,86 @@
 
 @media (max-width: 760px) {
   .topbar {
-    align-items: flex-start;
-    flex-direction: column;
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+    min-height: 46px;
+    overflow: hidden;
+    padding: 4px 0;
   }
 
-  .status-strip,
   .topbar-actions {
+    display: flex;
+    flex: 1 1 auto;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .topbar-brand {
+    flex: 0 1 132px;
+    gap: 6px;
+    min-height: 38px;
+    padding: 0 6px 0 2px;
+  }
+
+  .topbar-brand h1 {
+    font-size: 16px;
+    max-width: 92px;
+  }
+
+  .app-logo {
+    height: 32px;
+    width: 32px;
+  }
+
+  .settings-button {
+    justify-self: end;
+    min-height: 38px;
+    width: 38px;
+  }
+
+  .status-strip {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
     justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .status-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  .status {
+    flex: 0 0 auto;
+    max-width: 168px;
+    min-height: 34px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
 @media (max-width: 940px) {
-  .workspace {
+  .workspace,
+  .workspace-config-collapsed {
     grid-template-columns: 1fr;
+  }
+
+  .config-panel-collapsed {
+    align-items: stretch;
+  }
+
+  .config-panel-collapsed .config-sidebar-header {
+    justify-content: flex-start;
+  }
+
+  .config-panel-collapsed .config-rail {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .config-panel-collapsed .config-rail-button {
+    width: 100%;
   }
 }
 
@@ -46,6 +113,41 @@
 }
 
 @media (max-width: 620px) {
+  .app-shell {
+    padding: 10px;
+  }
+
+  .topbar-brand {
+    gap: 8px;
+    flex-basis: 42px;
+    padding-right: 2px;
+  }
+
+  .topbar-brand h1 {
+    display: none;
+  }
+
+  .app-logo {
+    height: 32px;
+    width: 32px;
+  }
+
+  .settings-button {
+    min-height: 36px;
+    padding: 0;
+    width: 38px;
+  }
+
+  .settings-button-label {
+    display: none;
+  }
+
+  .status {
+    min-height: 32px;
+    max-width: 150px;
+    padding: 4px 8px;
+  }
+
   .settings-page {
     padding: 12px;
   }

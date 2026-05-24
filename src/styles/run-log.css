@@ -1,3 +1,22 @@
+.log-drawer {
+  margin: 18px auto 0;
+  max-width: 1520px;
+}
+
+.log-drawer > summary {
+  grid-template-columns: 4px minmax(0, auto) minmax(0, 1fr) 14px;
+}
+
+.log-drawer > summary small {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .log-title {
   justify-content: space-between;
 }
@@ -9,8 +28,9 @@
 }
 
 .log-section {
-  margin: 18px auto 0;
-  max-width: 1520px;
+  border: 0;
+  box-shadow: none;
+  margin: 0;
   padding: 16px;
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildChatCompletionPayload } from './openAiPayload'
+import { buildChatCompletionPayload, buildFinalResponsePayload } from './openAiPayload'
 
 describe('buildChatCompletionPayload', () => {
   it('builds an OpenAI-compatible multimodal request', () => {
@@ -37,6 +37,9 @@ describe('buildChatCompletionPayload', () => {
     })
 
     expect(payload.messages[0].content).toContain('Return only one JSON object')
+    expect(payload.messages[0].content).toContain('"clear":boolean')
+    expect(payload.messages[0].content).not.toContain('"action":"interact"')
+    expect(payload.messages[0].content).not.toContain('"action":"call_api"')
     expect(payload.messages[0].content).not.toContain('Open-AutoGLM')
     expect(payload.messages[0].content).not.toContain('do(action=')
   })
@@ -165,6 +168,30 @@ describe('buildChatCompletionPayload', () => {
     expect(userMessage.content[0].text).toContain('chrome: com.android.chrome')
   })
 
+  it('includes every installed app in the user context', () => {
+    const payload = buildChatCompletionPayload({
+      model: 'agent-model',
+      task: 'Open app44',
+      screenshotDataUrl: 'data:image/png;base64,abc123',
+      screen: { width: 1080, height: 2400 },
+      installedApps: Array.from({ length: 45 }, (_, index) => ({
+        packageName: `com.example.app${index}`,
+      })),
+    })
+
+    const userMessage = payload.messages[1]
+    if (
+      userMessage.role !== 'user' ||
+      !Array.isArray(userMessage.content) ||
+      userMessage.content[0].type !== 'text'
+    ) {
+      throw new Error('Expected first user content item to be text.')
+    }
+
+    expect(userMessage.content[0].text).toContain('app44: com.example.app44')
+    expect(userMessage.content[0].text).toContain('app0: com.example.app0')
+  })
+
   it('preserves conversation messages and injects current context into the latest user turn', () => {
     const payload = buildChatCompletionPayload({
       model: 'agent-model',
@@ -254,6 +281,40 @@ describe('buildChatCompletionPayload', () => {
     expect(userMessage.content[1]).toEqual({
       type: 'image_url',
       image_url: { url: 'data:image/png;base64,abc123' },
+    })
+  })
+})
+
+describe('buildFinalResponsePayload', () => {
+  it('builds a text-only final response request without JSON response format', () => {
+    const payload = buildFinalResponsePayload({
+      model: 'agent-model',
+      task: 'Open Bluetooth settings',
+      conversation: [
+        { id: 'u1', role: 'user', content: 'Open Bluetooth settings' },
+        { id: 'a1', role: 'assistant', content: 'Bluetooth settings is open.' },
+      ],
+      history: [
+        {
+          step: 1,
+          currentApp: 'Settings',
+          actionPreview: 'tap Bluetooth',
+          executionResult: 'input tap 200 300',
+        },
+      ],
+      currentApp: 'Settings',
+      progressSummary: 'Bluetooth settings is open.',
+    })
+
+    expect(payload.response_format).toBeUndefined()
+    expect(payload.messages[0].content).toContain('final user-facing answer')
+    expect(payload.messages.at(-1)).toEqual({
+      role: 'user',
+      content: expect.stringContaining('Completed steps:'),
+    })
+    expect(payload.messages.at(-1)).toEqual({
+      role: 'user',
+      content: expect.stringContaining('Bluetooth settings is open.'),
     })
   })
 })

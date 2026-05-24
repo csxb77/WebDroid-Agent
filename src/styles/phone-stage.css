@@ -156,6 +156,15 @@
   z-index: 2;
 }
 
+.screenshot-visible-layer {
+  bottom: 0;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 5;
+}
+
 .tap-marker {
   background: #ffc107;
 }

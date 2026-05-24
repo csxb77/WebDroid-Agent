@@ -109,6 +109,14 @@ function mockSystemColorScheme(matches: boolean) {
 }
 
 const compactSectionCss = readFileSync('src/styles/compact-section.css', 'utf8')
+const layoutCss = readFileSync('src/styles/layout.css', 'utf8')
+
+function jsonResponse(body: unknown, init: ResponseInit = {}) {
+  return new Response(JSON.stringify(body), {
+    headers: { 'Content-Type': 'application/json' },
+    ...init,
+  })
+}
 
 async function settleAsyncWork() {
   for (let index = 0; index < 5; index += 1) {
@@ -176,15 +184,13 @@ describe('App', () => {
     threadStoreMock.store.delete.mockResolvedValue(undefined)
     Object.defineProperty(globalThis, 'fetch', {
       configurable: true,
-      value: vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: vi.fn().mockResolvedValue({
+      value: vi.fn<typeof fetch>(async () =>
+        jsonResponse({
           stargazers_count: 123,
           forks_count: 45,
           open_issues_count: 6,
         }),
-      }),
+      ),
     })
   })
 
@@ -204,14 +210,14 @@ describe('App', () => {
   it('clears run log entries from the log section', () => {
     render(<App />)
 
-    fireEvent.click(screen.getByText('Run options'))
-    fireEvent.click(screen.getByRole('button', { name: /reset/i }))
-    expect(screen.getByText('Agent context reset')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /new chat/i }))
+    expect(screen.getAllByText('New chat started').length).toBeGreaterThan(0)
 
+    fireEvent.click(document.querySelector('.log-drawer > summary') as HTMLElement)
     fireEvent.click(screen.getByRole('button', { name: /clear/i }))
 
-    expect(screen.queryByText('Agent context reset')).toBeNull()
-    expect(screen.getByText('No events yet')).toBeTruthy()
+    expect(screen.queryByText('New chat started')).toBeNull()
+    expect(screen.getAllByText('No events yet').length).toBeGreaterThan(0)
   })
 
   it('renders advanced optimization controls', () => {
@@ -235,6 +241,34 @@ describe('App', () => {
     expect(within(configPanel as HTMLElement).getByText('Device options')).toBeTruthy()
     expect(within(configPanel as HTMLElement).getByText('Direct commands')).toBeTruthy()
     expect(within(configPanel as HTMLElement).getByText('Installed apps')).toBeTruthy()
+  })
+
+  it('collapses the configuration panel into a rail and reopens target sections', async () => {
+    render(<App />)
+
+    const configPanel = document.querySelector('.config-panel')
+    expect(configPanel).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /collapse configuration panel/i }))
+
+    expect(configPanel?.classList.contains('config-panel-collapsed')).toBe(true)
+    expect(screen.queryByText('Model settings')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /open installed apps/i }))
+
+    await waitFor(() => {
+      expect(configPanel?.classList.contains('config-panel-expanded')).toBe(true)
+    })
+    await waitFor(() => {
+      expect(document.getElementById('config-installed-apps')?.hasAttribute('open')).toBe(true)
+    })
+    expect(screen.getByText('Installed apps')).toBeTruthy()
+  })
+
+  it('gives the chat panel more width when the configuration panel is collapsed', () => {
+    expect(layoutCss).toMatch(
+      /\.workspace-config-collapsed\s*\{[\s\S]*grid-template-columns:\s*64px\s+minmax\(320px,\s*1fr\)\s+minmax\(360px,\s*520px\)/,
+    )
   })
 
   it('does not expose the removed AutoGLM native prompt mode', () => {
@@ -268,11 +302,15 @@ describe('App', () => {
   it('keeps low-frequency homepage sections collapsed by default', () => {
     render(<App />)
 
-    for (const summary of ['Run options', 'Installed apps', 'Direct commands', 'Device options']) {
+    for (const summary of ['Installed apps', 'Direct commands', 'Device options']) {
       const details = screen.getByText(summary).closest('details')
       expect(details).toBeTruthy()
       expect(details?.hasAttribute('open')).toBe(false)
     }
+    expect(screen.queryByText('Advanced/debug')).toBeNull()
+    const logDrawer = document.querySelector('.log-drawer')
+    expect(logDrawer).toBeTruthy()
+    expect(logDrawer?.hasAttribute('open')).toBe(false)
     expect(document.querySelector('.chat-shell')).toBeTruthy()
   })
 
@@ -310,17 +348,15 @@ describe('App', () => {
       resolveFirstRequest = resolve
     })
     const fetchMock = vi
-      .fn()
+      .fn<typeof fetch>()
       .mockImplementationOnce(() => firstRequest)
-      .mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: vi.fn().mockResolvedValue({
+      .mockImplementation(async () =>
+        jsonResponse({
           stargazers_count: 123,
           forks_count: 45,
           open_issues_count: 6,
         }),
-      } as unknown as Response)
+      )
     Object.defineProperty(globalThis, 'fetch', {
       configurable: true,
       value: fetchMock,
@@ -334,15 +370,13 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /close settings/i }))
 
-    resolveFirstRequest({
-      ok: true,
-      status: 200,
-      json: vi.fn().mockResolvedValue({
+    resolveFirstRequest(
+      jsonResponse({
         stargazers_count: 999,
         forks_count: 999,
         open_issues_count: 999,
       }),
-    } as unknown as Response)
+    )
 
     fireEvent.click(screen.getByRole('button', { name: /settings/i }))
 
@@ -409,6 +443,29 @@ describe('App', () => {
     )
   })
 
+  it('does not reload the latest persisted thread when only the app language changes', async () => {
+    const restoredThread = createAgentThread('Resume Wi-Fi settings', {
+      id: 'restored-thread',
+      now: 1000,
+    })
+    threadStoreMock.store.loadLatest.mockResolvedValue(restoredThread)
+
+    render(<App />)
+
+    const conversation = screen.getByLabelText('Conversation')
+    expect(await within(conversation).findByText('Resume Wi-Fi settings')).toBeTruthy()
+    await waitFor(() => expect(threadStoreMock.store.loadLatest).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }))
+    const languageSelect = await screen.findByLabelText(/language/i)
+    fireEvent.change(languageSelect, { target: { value: 'zh-CN' } })
+
+    await settleAsyncWork()
+
+    expect(threadStoreMock.store.loadLatest).toHaveBeenCalledTimes(1)
+    expect(within(conversation).getByText('Resume Wi-Fi settings')).toBeTruthy()
+  })
+
   it('localizes screenshot preview labels after changing language', async () => {
     render(<App />)
 
@@ -425,7 +482,7 @@ describe('App', () => {
   it('keeps follow-up user messages in a continuous chat transcript', () => {
     render(<App />)
 
-    expect(screen.getByText('Open Settings and show the Wi-Fi page.')).toBeTruthy()
+    expect(screen.queryByText('What can I help with?')).toBeNull()
 
     fireEvent.change(screen.getByLabelText(/chat message/i), {
       target: { value: 'Now open the Bluetooth page.' },
@@ -433,15 +490,13 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /send/i }))
 
     const conversation = screen.getByLabelText('Conversation')
-    expect(within(conversation).getByText('Open Settings and show the Wi-Fi page.')).toBeTruthy()
     expect(within(conversation).getByText('Now open the Bluetooth page.')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: /new chat/i }))
 
     const emptyConversation = screen.getByLabelText('Conversation')
-    expect(within(emptyConversation).queryByText('Open Settings and show the Wi-Fi page.')).toBeNull()
     expect(within(emptyConversation).queryByText('Now open the Bluetooth page.')).toBeNull()
-    expect(within(emptyConversation).getByText('No messages yet')).toBeTruthy()
+    expect(within(emptyConversation).queryByText('What can I help with?')).toBeNull()
   })
 
   it('restores the latest persisted thread on startup', async () => {
@@ -480,7 +535,8 @@ describe('App', () => {
   it('persists chat updates after the thread store is ready', async () => {
     render(<App />)
 
-    await waitFor(() => expect(threadStoreMock.store.save).toHaveBeenCalled())
+    await waitFor(() => expect(threadStoreMock.store.list).toHaveBeenCalled())
+    expect(threadStoreMock.store.save).not.toHaveBeenCalled()
     threadStoreMock.store.save.mockClear()
 
     fireEvent.change(screen.getByLabelText(/chat message/i), {
@@ -499,17 +555,62 @@ describe('App', () => {
     )
   })
 
-  it('fills the chat input from a task template without sending it', () => {
+  it('opens history, restores a selected thread, and deletes history rows', async () => {
+    const latestThread = createAgentThread('Latest task', {
+      id: 'thread-latest',
+      now: 2000,
+    })
+    const olderThread = createAgentThread('Older task', {
+      id: 'thread-older',
+      now: 1000,
+    })
+    threadStoreMock.store.loadLatest.mockResolvedValue(latestThread)
+    threadStoreMock.store.list.mockResolvedValue([
+      {
+        id: latestThread.id,
+        title: latestThread.title,
+        task: latestThread.task,
+        status: latestThread.status,
+        createdAt: latestThread.createdAt,
+        updatedAt: latestThread.updatedAt,
+      },
+      {
+        id: olderThread.id,
+        title: olderThread.title,
+        task: olderThread.task,
+        status: olderThread.status,
+        createdAt: olderThread.createdAt,
+        updatedAt: olderThread.updatedAt,
+      },
+    ])
+    threadStoreMock.store.load.mockResolvedValue(olderThread)
+
     render(<App />)
 
-    const templateSelect = screen.getByLabelText(/task template/i)
-    fireEvent.change(templateSelect, { target: { value: 'launch-app' } })
-
-    expect((screen.getByLabelText(/chat message/i) as HTMLTextAreaElement).value).toBe(
-      'Launch the app named <app name>, wait until it is fully visible, and report the current screen.',
-    )
     const conversation = screen.getByLabelText('Conversation')
-    expect(within(conversation).queryByText(/Launch the app named/)).toBeNull()
+    expect(await within(conversation).findByText('Latest task')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /open history sidebar/i }))
+    expect(await screen.findByRole('complementary', { name: /history/i })).toBeTruthy()
+    expect(screen.getByText('Older task')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /open chat older task/i }))
+
+    await waitFor(() => expect(threadStoreMock.store.load).toHaveBeenCalledWith('thread-older'))
+    expect(within(conversation).getByText('Older task')).toBeTruthy()
+    expect(within(conversation).queryByText('Latest task')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /open history sidebar/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /delete chat older task/i }))
+
+    await waitFor(() => expect(threadStoreMock.store.delete).toHaveBeenCalledWith('thread-older'))
+  })
+
+  it('does not expose task template controls in the chat flow', () => {
+    render(<App />)
+
+    expect(screen.queryByLabelText(/task template/i)).toBeNull()
+    expect(screen.queryByText(/choose a template/i)).toBeNull()
   })
 
   it('captures and displays a screenshot immediately after connecting', async () => {
@@ -569,18 +670,15 @@ describe('App', () => {
 
   it('downloads, installs, and enables ADB Keyboard from the device panel', async () => {
     const apkBytes = new Uint8Array([80, 75, 3, 4])
-    vi.mocked(globalThis.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      arrayBuffer: vi.fn().mockResolvedValue(apkBytes.buffer),
-    } as unknown as Response)
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(new Response(apkBytes))
+    backendMock.getInputMethods.mockResolvedValueOnce('')
 
     render(<App />)
 
     fireEvent.click(screen.getAllByRole('button', { name: /connect/i })[0])
     expect(await screen.findByText('Pixel')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: /install adb keyboard/i }))
+    fireEvent.click(screen.getByRole('button', { name: /configure text input/i }))
 
     await waitFor(() => expect(backendMock.installAdbKeyboard).toHaveBeenCalledTimes(1))
     expect(globalThis.fetch).toHaveBeenCalledWith(
@@ -593,7 +691,7 @@ describe('App', () => {
       4,
     ])
     expect(backendMock.enableAdbKeyboard).toHaveBeenCalled()
-    expect(await screen.findByText('ADB Keyboard installed')).toBeTruthy()
+    expect((await screen.findAllByText('Text input configured')).length).toBeGreaterThan(0)
   })
 
   it('runs direct tap commands from the device panel', async () => {
@@ -608,7 +706,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /run tap/i }))
 
     expect(backendMock.execute).toHaveBeenCalledWith({ action: 'tap', x: 120, y: 340 })
-    expect(await screen.findByText('Direct command')).toBeTruthy()
+    expect((await screen.findAllByText('Direct command')).length).toBeGreaterThan(0)
   })
 
   it('refreshes the displayed screenshot after a direct device action returns', async () => {
@@ -664,6 +762,44 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Run generated action' }))
 
     expect(backendMock.execute).toHaveBeenCalledWith({ action: 'tap', x: 540, y: 1200 })
+  })
+
+  it('maps screenshot-generated actions from model pixels back to device pixels', async () => {
+    backendMock.screenshot.mockResolvedValueOnce({
+      bytes: new Uint8Array(),
+      dataUrl: 'data:image/png;base64,raw',
+      screen: { width: 1080, height: 2400 },
+      modelDataUrl: 'data:image/png;base64,model',
+      modelScreen: { width: 540, height: 1200 },
+    })
+
+    render(<App />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: /connect/i })[0])
+    expect((await screen.findByAltText('Android screenshot')).getAttribute('src')).toBe(
+      'data:image/png;base64,model',
+    )
+
+    const layer = screen.getByLabelText('Screenshot interaction layer')
+    vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue({
+      bottom: 620,
+      height: 600,
+      left: 10,
+      right: 280,
+      top: 20,
+      width: 270,
+      x: 10,
+      y: 20,
+      toJSON: () => ({}),
+    })
+
+    fireEvent.mouseDown(layer, { clientX: 145, clientY: 320 })
+    fireEvent.mouseUp(layer, { clientX: 145, clientY: 320 })
+    fireEvent.click(screen.getByRole('button', { name: 'Run generated action' }))
+
+    await waitFor(() => {
+      expect(backendMock.execute).toHaveBeenCalledWith({ action: 'tap', x: 540, y: 1200 })
+    })
   })
 
   it('searches installed apps and launches the selected package', async () => {

@@ -1,4 +1,4 @@
-import { buildChatCompletionPayload } from './openAiPayload'
+import { buildChatCompletionPayload, buildFinalResponsePayload } from './openAiPayload'
 import {
   extractAssistantText,
   formatApiError,
@@ -6,7 +6,13 @@ import {
   readStreamingAssistantText,
 } from './openAiResponse'
 import { OpenAiClientError } from './openAiErrors'
-import type { CompletionRequest, OpenAiClient, RepairActionRequest } from './openAiTypes'
+import type {
+  ChatCompletionPayload,
+  FinalResponseRequest,
+  CompletionRequest,
+  OpenAiClient,
+  RepairActionRequest,
+} from './openAiTypes'
 
 export { buildChatCompletionPayload } from './openAiPayload'
 export { OpenAiClientError } from './openAiErrors'
@@ -17,6 +23,7 @@ export {
   type ChatCompletionPayload,
   type ChatMessage,
   type CompletionRequest,
+  type FinalResponseRequest,
   type ModelConfig,
   type OpenAiClient,
   type RepairActionRequest,
@@ -27,17 +34,40 @@ export function normalizeBaseUrl(baseUrl: string) {
   return baseUrl.trim().replace(/\/+$/, '')
 }
 
-export function createOpenAiClient(fetcher: typeof fetch = fetch): OpenAiClient {
-  async function completeAction(request: CompletionRequest) {
-    const url = `${normalizeBaseUrl(request.baseUrl)}/chat/completions`
-    const payload = buildChatCompletionPayload(request)
+export type OpenAiClientOptions = {
+  proxyUrl?: string
+}
+
+export function createOpenAiClient(
+  fetcher: typeof fetch = fetch,
+  options: OpenAiClientOptions = {},
+): OpenAiClient {
+  async function completePayload(
+    request: Pick<CompletionRequest, 'baseUrl' | 'apiKey' | 'stream' | 'signal'>,
+    payload: ChatCompletionPayload,
+  ) {
+    const proxyUrl = options.proxyUrl?.trim()
+    const url = proxyUrl || `${normalizeBaseUrl(request.baseUrl)}/chat/completions`
     const response = await fetcher(url, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${request.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
+      headers: proxyUrl
+        ? {
+            'Content-Type': 'application/json',
+          }
+        : {
+            Authorization: `Bearer ${request.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+      signal: request.signal,
+      body: JSON.stringify(
+        proxyUrl
+          ? {
+              baseUrl: request.baseUrl,
+              apiKey: request.apiKey,
+              payload,
+            }
+          : payload,
+      ),
     })
 
     if (request.stream) {
@@ -57,8 +87,17 @@ export function createOpenAiClient(fetcher: typeof fetch = fetch): OpenAiClient 
     return extractAssistantText(body)
   }
 
+  async function completeAction(request: CompletionRequest) {
+    return completePayload(request, buildChatCompletionPayload(request))
+  }
+
+  async function completeFinalResponse(request: FinalResponseRequest) {
+    return completePayload(request, buildFinalResponsePayload(request))
+  }
+
   return {
     completeAction,
+    completeFinalResponse,
     repairAction(request) {
       return completeAction({
         ...request,

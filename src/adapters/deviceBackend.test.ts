@@ -21,6 +21,7 @@ import {
 import {
   parseInstalledAppsFromPackageOutput,
   resolveInstalledAppPackage,
+  selectInstalledAppsForPrompt,
 } from './installedApps'
 import {
   resolveAppNameFromPackage,
@@ -149,6 +150,17 @@ describe('buildInputCommandSequence', () => {
       ['input', 'text', 'hello%sworld'],
       { waitMs: DEFAULT_ACTION_SETTLE_DELAY_MS },
     ])
+
+    expect(
+      buildInputCommandSequence({ action: 'input_text', text: 'hello world', clear: true }),
+    ).toEqual([
+      ['input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_A'],
+      { waitMs: DEFAULT_DEVICE_TIMING.keyboardStepMs },
+      ['input', 'keyevent', 'KEYCODE_DEL'],
+      { waitMs: DEFAULT_DEVICE_TIMING.keyboardStepMs },
+      ['input', 'text', 'hello%sworld'],
+      { waitMs: DEFAULT_ACTION_SETTLE_DELAY_MS },
+    ])
   })
 
   it('uses custom settle and double-tap timing when provided', () => {
@@ -216,6 +228,8 @@ describe('keyToAndroidKeyCode', () => {
 describe('resolveAppPackage', () => {
   it('maps common Open-AutoGLM app names to Android packages', () => {
     expect(resolveAppPackage('京东')).toBe('com.jingdong.app.mall')
+    expect(resolveAppPackage('B站')).toBe('tv.danmaku.bili')
+    expect(resolveAppPackage('哔哩哔哩')).toBe('tv.danmaku.bili')
     expect(resolveAppPackage('YouTube')).toBe('com.google.android.youtube')
     expect(resolveAppPackage('JD.com')).toBe('com.jingdong.app.mall')
     expect(resolveAppPackage('com.example.app')).toBe('com.example.app')
@@ -225,6 +239,8 @@ describe('resolveAppPackage', () => {
     expect(resolveAppNameFromPackage('com.jingdong.app.mall')).toBe('京东')
     expect(resolveAppNameFromPackage('com.google.android.apps.maps')).toBe('maps')
     expect(resolveAppNameFromPackage('com.twitter.android')).toBe('x')
+    expect(resolveAppNameFromPackage('tv.danmaku.bili')).toBe('哔哩哔哩')
+    expect(resolveAppNameFromPackage('com.bilibili.app.in')).toBe('bilibili')
   })
 })
 
@@ -300,6 +316,7 @@ ResolveInfo:
       packageName=com.android.mms
       packageName=com.coloros.gallery3d
       packageName=com.example.notes
+      packageName=tv.danmaku.bili
     `)
 
     expect(resolveInstalledAppPackage('Gmail', apps)).toBe('com.google.android.gm')
@@ -308,6 +325,42 @@ ResolveInfo:
     expect(resolveInstalledAppPackage('相册', apps)).toBe('com.coloros.gallery3d')
     expect(resolveInstalledAppPackage('notes', apps)).toBe('com.example.notes')
     expect(resolveInstalledAppPackage('com.example.notes', apps)).toBe('com.example.notes')
+    expect(resolveInstalledAppPackage('B站', apps)).toBe('tv.danmaku.bili')
+  })
+
+  it('matches Bilibili aliases against alternate installed packages', () => {
+    expect(
+      resolveInstalledAppPackage('B站', [
+        { packageName: 'com.example.app' },
+        { packageName: 'com.bilibili.app.in' },
+      ]),
+    ).toBe('com.bilibili.app.in')
+  })
+
+  it('prioritizes apps mentioned by the user before truncating prompt app lists', () => {
+    const apps = [
+      ...Array.from({ length: 48 }, (_, index) => ({
+        packageName: `com.example.app${index}`,
+      })),
+      { packageName: 'tv.danmaku.bili' },
+    ]
+
+    const selected = selectInstalledAppsForPrompt(apps, '打开 B 站', 40)
+
+    expect(selected).toHaveLength(40)
+    expect(selected[0].packageName).toBe('tv.danmaku.bili')
+  })
+
+  it('keeps every installed app for prompts when no limit is provided', () => {
+    const apps = Array.from({ length: 48 }, (_, index) => ({
+      packageName: `com.example.app${index}`,
+    }))
+
+    const selected = selectInstalledAppsForPrompt(apps, '打开 app47')
+
+    expect(selected).toHaveLength(48)
+    expect(selected.map((app) => app.packageName)).toContain('com.example.app47')
+    expect(selected.map((app) => app.packageName)).toContain('com.example.app0')
   })
 })
 

@@ -33,12 +33,12 @@ import { parseInstalledAppsFromPackageOutput } from './installedApps'
 import { preprocessScreenshotForModel } from './screenshotPreprocess'
 
 const ADB_KEYBOARD_BROADCAST_ERROR = [
-  'ADB Keyboard or AutoGLM Keyboard was detected but did not accept the text broadcast.',
+  'ADB Keyboard or AutoGLM Keyboard was detected but did not accept the text or clear broadcast.',
   'Re-enable the keyboard on the device, then try again.',
 ].join(' ')
 
 const ADB_KEYBOARD_MISSING_ERROR = [
-  'Chinese or complex text requires ADB Keyboard or AutoGLM Keyboard.',
+  'Clearing text, Chinese text, or complex text requires ADB Keyboard or AutoGLM Keyboard.',
   'Install and enable it on the device, then try again.',
 ].join(' ')
 
@@ -193,8 +193,19 @@ export class WebAdbDeviceBackend implements DeviceBackend {
       return action.summary || 'Task completed.'
     }
 
-    if (action.action === 'input_text' && (this.#preferAdbKeyboard || !isAndroidInputTextSafe(action.text))) {
-      return await this.#inputTextWithAdbKeyboard(action.text)
+    if (action.action === 'interact') {
+      throw new DeviceBackendError(`Manual interaction required: ${action.message}`)
+    }
+
+    if (action.action === 'call_api') {
+      throw new DeviceBackendError(`Unsupported call_api action: ${action.instruction}`)
+    }
+
+    if (
+      action.action === 'input_text' &&
+      (action.clear || this.#preferAdbKeyboard || !isAndroidInputTextSafe(action.text))
+    ) {
+      return await this.#inputTextWithAdbKeyboard(action.text, { clear: action.clear })
     }
 
     await assertSensitiveActionConfirmed(action, options)
@@ -289,7 +300,7 @@ export class WebAdbDeviceBackend implements DeviceBackend {
     await this.#requireAdb().subprocess.noneProtocol.spawnWait(step)
   }
 
-  async #inputTextWithAdbKeyboard(text: string) {
+  async #inputTextWithAdbKeyboard(text: string, options: { clear?: boolean } = {}) {
     const adb = this.#requireAdb()
     const keyboardIme = await this.#detectAdbKeyboardIme()
     const originalIme = await this.#getCurrentInputMethod()
@@ -304,9 +315,11 @@ export class WebAdbDeviceBackend implements DeviceBackend {
       executed.push('am broadcast -a ADB_INPUT_B64 --es msg <empty>')
       await delay(this.#timing.keyboardStepMs)
 
-      await adb.subprocess.noneProtocol.spawnWait(['am', 'broadcast', '-a', 'ADB_CLEAR_TEXT'])
-      executed.push('am broadcast -a ADB_CLEAR_TEXT')
-      await delay(this.#timing.keyboardStepMs)
+      if (options.clear) {
+        await adb.subprocess.noneProtocol.spawnWait(['am', 'broadcast', '-a', 'ADB_CLEAR_TEXT'])
+        executed.push('am broadcast -a ADB_CLEAR_TEXT')
+        await delay(this.#timing.keyboardStepMs)
+      }
 
       const command = await this.#sendAdbKeyboardText(text)
       executed.push(command.join(' '))

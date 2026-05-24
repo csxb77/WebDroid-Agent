@@ -1,5 +1,8 @@
 import type { InstalledApp } from '../adapters/deviceTypes'
-import { getInstalledAppDisplayName } from '../adapters/installedApps'
+import {
+  getInstalledAppDisplayName,
+  selectInstalledAppsForPrompt,
+} from '../adapters/installedApps'
 import { buildSystemPrompt } from './prompts'
 import { buildScreenshotContext } from './screenshotCoordinates'
 import type {
@@ -7,6 +10,7 @@ import type {
   ChatCompletionPayload,
   ChatMessage,
   CompletionRequest,
+  FinalResponseRequest,
   UserContent,
 } from './openAiTypes'
 
@@ -101,6 +105,103 @@ export function buildChatCompletionPayload({
   return payload
 }
 
+export function buildFinalResponsePayload({
+  model,
+  task,
+  conversation,
+  history = [],
+  currentApp,
+  deviceState,
+  progressSummary,
+  stream,
+}: Pick<
+  FinalResponseRequest,
+  | 'model'
+  | 'task'
+  | 'conversation'
+  | 'history'
+  | 'currentApp'
+  | 'deviceState'
+  | 'progressSummary'
+  | 'stream'
+>): ChatCompletionPayload {
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: buildFinalResponseSystemPrompt(),
+    },
+  ]
+
+  for (const message of conversation?.filter((item) => item.content.trim()) ?? []) {
+    messages.push(toChatMessage(message))
+  }
+
+  messages.push({
+    role: 'user',
+    content: buildFinalResponseContext({
+      task,
+      history,
+      currentApp,
+      deviceState,
+      progressSummary,
+    }),
+  })
+
+  return {
+    model,
+    temperature: 0.2,
+    max_tokens: 700,
+    ...(stream ? { stream: true } : {}),
+    messages,
+  }
+}
+
+function buildFinalResponseSystemPrompt() {
+  return [
+    'You are WebDroid Agent writing the final user-facing answer after completing Android control steps.',
+    'Write concise natural language, like a Codex final response after tool steps complete.',
+    'Do not return JSON. Markdown is allowed.',
+    'State what was completed, mention any important caveat only if the recorded steps show one, and avoid inventing unseen results.',
+  ].join('\n')
+}
+
+function buildFinalResponseContext({
+  task,
+  history,
+  currentApp,
+  deviceState,
+  progressSummary,
+}: Pick<
+  FinalResponseRequest,
+  'task' | 'history' | 'currentApp' | 'deviceState' | 'progressSummary'
+>) {
+  const lines = [
+    `Original task: ${task}`,
+    progressSummary ? `Completion summary: ${progressSummary}` : null,
+    `Current app: ${currentApp ?? deviceState?.app ?? 'Unknown'}`,
+    deviceState?.packageName ? `Package: ${deviceState.packageName}` : null,
+    'Write the final answer now.',
+  ].filter(Boolean) as string[]
+
+  if (history && history.length > 0) {
+    lines.push('', 'Completed steps:')
+    for (const item of history.slice(-12)) {
+      lines.push(
+        [
+          `Step ${item.step}`,
+          item.currentApp ? `app=${item.currentApp}` : null,
+          `action=${item.actionPreview}`,
+          item.executionResult ? `result=${item.executionResult}` : null,
+        ]
+          .filter(Boolean)
+          .join(' | '),
+      )
+    }
+  }
+
+  return lines.join('\n')
+}
+
 function buildUserContext({
   task,
   screen,
@@ -144,7 +245,7 @@ function buildUserContext({
     latestUserMessage ? `Latest user message: ${latestUserMessage}` : null,
     `Screen Info: ${screenInfo}`,
     appCard ? `<app_card>\n${appCard}\n</app_card>` : null,
-    formatInstalledApps(installedApps),
+    formatInstalledApps(installedApps, [task, latestUserMessage].join('\n')),
     'Treat the latest user message as the current instruction. Use earlier messages and observations only as context.',
     canonicalCoordinateInstruction,
   ].filter(Boolean) as string[]
@@ -168,15 +269,13 @@ function buildUserContext({
   return lines.join('\n')
 }
 
-function formatInstalledApps(installedApps?: readonly InstalledApp[]) {
-  const apps = installedApps?.filter((app) => app.packageName.trim()) ?? []
+function formatInstalledApps(installedApps?: readonly InstalledApp[], query = '') {
+  const apps = selectInstalledAppsForPrompt(installedApps, query)
   if (apps.length === 0) {
     return null
   }
 
-  const lines = apps
-    .slice(0, 40)
-    .map((app) => `${getInstalledAppDisplayName(app)}: ${app.packageName}`)
+  const lines = apps.map((app) => `${getInstalledAppDisplayName(app)}: ${app.packageName}`)
 
   return [`<installed_apps>`, ...lines, `</installed_apps>`].join('\n')
 }

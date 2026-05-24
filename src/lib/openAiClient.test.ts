@@ -1,6 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createOpenAiClient, normalizeBaseUrl } from './openAiClient'
 
+function jsonResponse(body: unknown, init: ResponseInit = {}) {
+  return new Response(JSON.stringify(body), {
+    headers: { 'Content-Type': 'application/json' },
+    ...init,
+  })
+}
+
+function completionResponse(content: string) {
+  return jsonResponse({ choices: [{ message: { content } }] })
+}
+
 describe('normalizeBaseUrl', () => {
   it('removes trailing slashes', () => {
     expect(normalizeBaseUrl('https://api.example.com/v1///')).toBe('https://api.example.com/v1')
@@ -9,10 +20,7 @@ describe('normalizeBaseUrl', () => {
 
 describe('createOpenAiClient', () => {
   it('posts to /chat/completions with bearer auth', async () => {
-    const fetcher = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: '{"action":"done"}' } }] }),
-    })) as unknown as typeof fetch
+    const fetcher = vi.fn<typeof fetch>(async () => completionResponse('{"action":"done"}'))
     const client = createOpenAiClient(fetcher)
 
     const text = await client.completeAction({
@@ -37,6 +45,38 @@ describe('createOpenAiClient', () => {
     )
   })
 
+  it('posts model config and payload to a local proxy when configured', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => completionResponse('{"action":"done"}'))
+    const client = createOpenAiClient(fetcher, {
+      proxyUrl: '/api/openai/chat/completions',
+    })
+
+    const text = await client.completeAction({
+      baseUrl: 'https://api.example.com/v1/',
+      apiKey: 'secret',
+      model: 'agent-model',
+      task: 'Finish',
+      screenshotDataUrl: 'data:image/png;base64,abc123',
+      screen: { width: 10, height: 20 },
+    })
+
+    expect(text).toBe('{"action":"done"}')
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/openai/chat/completions',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    )
+    const proxyBody = JSON.parse(String(vi.mocked(fetcher).mock.calls[0][1]?.body))
+    expect(proxyBody.baseUrl).toBe('https://api.example.com/v1/')
+    expect(proxyBody.apiKey).toBe('secret')
+    expect(proxyBody.payload.model).toBe('agent-model')
+    expect(proxyBody.payload.messages).toBeTruthy()
+  })
+
   it('aggregates streamed chat completion chunks', async () => {
     const encoder = new TextEncoder()
     const body = new ReadableStream({
@@ -53,13 +93,7 @@ describe('createOpenAiClient', () => {
         controller.close()
       },
     })
-    const fetcher = vi.fn(async () => ({
-      ok: true,
-      body,
-      json: async () => {
-        throw new Error('streaming responses should not be read as JSON')
-      },
-    })) as unknown as typeof fetch
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(body))
     const client = createOpenAiClient(fetcher)
 
     const text = await client.completeAction({
@@ -76,12 +110,9 @@ describe('createOpenAiClient', () => {
   })
 
   it('sends invalid action output and validation errors when repairing an action', async () => {
-    const fetcher = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({
-        choices: [{ message: { content: '{"action":"tap","x":100,"y":200}' } }],
-      }),
-    })) as unknown as typeof fetch
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      completionResponse('{"action":"tap","x":100,"y":200}'),
+    )
     const client = createOpenAiClient(fetcher)
 
     const text = await client.repairAction?.({
@@ -107,5 +138,43 @@ describe('createOpenAiClient', () => {
     expect(requestBody.messages[1].content[0].text).toContain(
       'Point is outside the current screen.',
     )
+  })
+
+  it('requests a natural-language final response without JSON mode', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => completionResponse('All set.'))
+    const client = createOpenAiClient(fetcher)
+
+    const text = await client.completeFinalResponse?.({
+      baseUrl: 'https://api.example.com/v1/',
+      apiKey: 'secret',
+      model: 'agent-model',
+      task: 'Open Bluetooth settings',
+      conversation: [{ id: 'u1', role: 'user', content: 'Open Bluetooth settings' }],
+      progressSummary: 'Bluetooth settings is open.',
+    })
+
+    expect(text).toBe('All set.')
+    const requestBody = JSON.parse(String(vi.mocked(fetcher).mock.calls[0][1]?.body))
+    expect(requestBody.response_format).toBeUndefined()
+    expect(requestBody.stream).toBeUndefined()
+    expect(requestBody.messages.at(-1).content).toContain('Write the final answer now.')
+  })
+
+  it('passes abort signals to the completion request fetch', async () => {
+    const controller = new AbortController()
+    const fetcher = vi.fn<typeof fetch>(async () => completionResponse('{"action":"done"}'))
+    const client = createOpenAiClient(fetcher)
+
+    await client.completeAction({
+      baseUrl: 'https://api.example.com/v1/',
+      apiKey: 'secret',
+      model: 'agent-model',
+      task: 'Finish',
+      screenshotDataUrl: 'data:image/png;base64,abc123',
+      screen: { width: 10, height: 20 },
+      signal: controller.signal,
+    })
+
+    expect(vi.mocked(fetcher).mock.calls[0][1]?.signal).toBe(controller.signal)
   })
 })

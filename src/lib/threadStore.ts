@@ -87,37 +87,48 @@ export function createIndexedDbThreadStore(
 
   return {
     async save(thread) {
-      const database = await openDatabase(indexedDb, databaseName)
-      await runTransaction(database, 'readwrite', (store) => store.put(cloneThread(thread)))
-      database.close()
+      await withDatabase(indexedDb, databaseName, (database) =>
+        runTransaction(database, 'readwrite', (store) => store.put(cloneThread(thread))),
+      )
     },
     async load(threadId) {
-      const database = await openDatabase(indexedDb, databaseName)
-      const result = await runTransaction<AgentThread | undefined>(database, 'readonly', (store) =>
-        store.get(threadId),
+      const result = await withDatabase(indexedDb, databaseName, (database) =>
+        runTransaction<AgentThread | undefined>(database, 'readonly', (store) =>
+          store.get(threadId),
+        ),
       )
-      database.close()
       return result ? cloneThread(result) : null
     },
     async loadLatest() {
-      const database = await openDatabase(indexedDb, databaseName)
-      const result = await loadLatestThread(database)
-      database.close()
+      const result = await withDatabase(indexedDb, databaseName, loadLatestThread)
       return result ? cloneThread(result) : null
     },
     async list() {
-      const database = await openDatabase(indexedDb, databaseName)
-      const result = await runTransaction<AgentThread[]>(database, 'readonly', (store) =>
-        store.getAll(),
+      const result = await withDatabase(indexedDb, databaseName, (database) =>
+        runTransaction<AgentThread[]>(database, 'readonly', (store) =>
+          store.getAll(),
+        ),
       )
-      database.close()
       return sortedThreads(result).map(toThreadSummary)
     },
     async delete(threadId) {
-      const database = await openDatabase(indexedDb, databaseName)
-      await runTransaction(database, 'readwrite', (store) => store.delete(threadId))
-      database.close()
+      await withDatabase(indexedDb, databaseName, (database) =>
+        runTransaction(database, 'readwrite', (store) => store.delete(threadId)),
+      )
     },
+  }
+}
+
+async function withDatabase<Result>(
+  indexedDb: IDBFactory,
+  databaseName: string,
+  run: (database: IDBDatabase) => Promise<Result>,
+) {
+  const database = await openDatabase(indexedDb, databaseName)
+  try {
+    return await run(database)
+  } finally {
+    database.close()
   }
 }
 
@@ -147,10 +158,12 @@ function runTransaction<Result = undefined>(
     const transaction = database.transaction(THREAD_STORE, mode)
     const store = transaction.objectStore(THREAD_STORE)
     const request = run(store)
-    request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error ?? new Error('Thread store request failed.'))
+    transaction.oncomplete = () => resolve(request.result)
     transaction.onerror = () =>
       reject(transaction.error ?? new Error('Thread store transaction failed.'))
+    transaction.onabort = () =>
+      reject(transaction.error ?? new Error('Thread store transaction aborted.'))
   })
 }
 

@@ -4,6 +4,7 @@ import type { AgentAction } from './actionTypes'
 import {
   addThreadEvent,
   createAgentThread,
+  recordThreadFinalResponse,
   recordThreadTurnExecution,
   recordThreadUserMessage,
   startThreadTurn,
@@ -137,6 +138,46 @@ describe('agent thread model', () => {
         status: 'running',
         message: 'Run started',
       }),
+    )
+  })
+
+  it('replaces a provisional done summary with the final assistant response', () => {
+    const thread = createAgentThread('Open Bluetooth', { id: 'thread-final', now: 1000 })
+    const action: AgentAction = { action: 'done', summary: 'Bluetooth is open.' }
+    const turn = startThreadTurn(thread, {
+      id: 'turn-final',
+      index: 1,
+      task: 'Open Bluetooth',
+      latestUserMessage: 'Open Bluetooth',
+      promptContext: 'Task: Open Bluetooth',
+      modelOutput: '{"action":"done","summary":"Bluetooth is open."}',
+      action,
+      executionAction: action,
+      preview: 'done - Bluetooth is open.',
+      deviceSnapshot: {
+        currentApp: 'Settings',
+        deviceState: { app: 'Settings', packageName: 'com.android.settings' },
+        screenshot,
+      },
+      timing: { captureMs: 1, currentAppMs: 2, modelMs: 3, parseMs: 4, totalMs: 10 },
+      now: 1100,
+    })
+
+    recordThreadTurnExecution(thread, turn.id, { now: 1200 })
+    const final = recordThreadFinalResponse(thread, 'All set. Bluetooth settings is open.', {
+      now: 1300,
+    })
+
+    expect(final.content).toBe('All set. Bluetooth settings is open.')
+    expect(thread.messages.filter((message) => message.role === 'assistant')).toHaveLength(1)
+    expect(thread.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'assistant_message',
+          messageId: final.id,
+          message: 'All set. Bluetooth settings is open.',
+        }),
+      ]),
     )
   })
 })

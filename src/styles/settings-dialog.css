@@ -35,10 +35,6 @@
   font-size: 24px;
 }
 
-.settings-close {
-  flex: 0 0 auto;
-}
-
 .settings-copy {
   color: var(--text-secondary);
   line-height: 1.55;

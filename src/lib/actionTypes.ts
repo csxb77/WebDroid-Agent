@@ -32,6 +32,7 @@ export type LaunchAction = {
 export type InputTextAction = {
   action: 'input_text'
   text: string
+  clear?: boolean
   reason?: string
 }
 

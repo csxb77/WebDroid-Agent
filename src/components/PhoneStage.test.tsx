@@ -11,6 +11,7 @@ const responsiveCss = readFileSync('src/styles/responsive.css', 'utf8')
 
 afterEach(() => {
   cleanup()
+  vi.unstubAllGlobals()
 })
 
 describe('PhoneStage', () => {
@@ -108,6 +109,53 @@ describe('PhoneStage', () => {
       toX: 540,
       toY: 800,
     })
+  })
+
+  it('sizes the screenshot interaction layer to the visible image, not letterboxed frame', () => {
+    class MockResizeObserver {
+      private readonly callback: ResizeObserverCallback
+
+      constructor(callback: ResizeObserverCallback) {
+        this.callback = callback
+      }
+
+      observe() {
+        this.callback(
+          [
+            {
+              contentRect: {
+                height: 600,
+                width: 270,
+              },
+            } as ResizeObserverEntry,
+          ],
+          this as ResizeObserver,
+        )
+      }
+
+      disconnect() {}
+      unobserve() {}
+    }
+    vi.stubGlobal('ResizeObserver', MockResizeObserver)
+
+    const { container } = render(
+      <PhoneStage
+        copy={APP_COPY['en-US']}
+        displayedScreenshot={{
+          dataUrl: 'data:image/png;base64,abc123',
+          screen: { width: 1080, height: 2316 },
+        }}
+        onRunInteractiveAction={vi.fn()}
+        pendingStep={null}
+      />,
+    )
+
+    const visibleLayer = container.querySelector('.screenshot-visible-layer') as HTMLElement
+
+    expect(visibleLayer.style.left).toBe('0%')
+    expect(visibleLayer.style.width).toBe('100%')
+    expect(parseFloat(visibleLayer.style.top)).toBeCloseTo(1.75, 2)
+    expect(parseFloat(visibleLayer.style.height)).toBeCloseTo(96.5, 1)
   })
 
   it('zooms and resets the middle screenshot with controls', () => {

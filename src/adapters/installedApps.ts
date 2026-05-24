@@ -115,6 +115,31 @@ export function getInstalledAppSearchValues(app: InstalledApp) {
   ].filter((value): value is string => Boolean(value))
 }
 
+export function selectInstalledAppsForPrompt(
+  installedApps: readonly InstalledApp[] = [],
+  query = '',
+  limit?: number,
+) {
+  const apps = installedApps.filter((app) => app.packageName.trim())
+  if (apps.length === 0) {
+    return []
+  }
+
+  const normalizedQuery = normalizeAppToken(query)
+  const selected = normalizedQuery
+    ? apps
+        .map((app, index) => ({
+          app,
+          index,
+          score: scoreInstalledAppPromptRelevance(normalizedQuery, app),
+        }))
+        .sort((left, right) => right.score - left.score || left.index - right.index)
+        .map((item) => item.app)
+    : apps
+
+  return limit === undefined ? selected : selected.slice(0, limit)
+}
+
 export function cleanInstalledAppLabel(value: string | undefined) {
   if (!value) {
     return undefined
@@ -187,6 +212,24 @@ function scoreInstalledAppMatch(query: string, app: InstalledApp) {
   }
   if (query.length >= 3 && tokens.some((token) => token.includes(query))) {
     return 50
+  }
+  return 0
+}
+
+function scoreInstalledAppPromptRelevance(query: string, app: InstalledApp) {
+  if (!query) {
+    return 0
+  }
+
+  const tokens = installedAppTokens(app)
+  if (tokens.some((token) => token && query === token)) {
+    return 1000
+  }
+  if (tokens.some((token) => token.length >= 2 && query.includes(token))) {
+    return 900
+  }
+  if (tokens.some((token) => token.length >= 3 && token.includes(query))) {
+    return 600
   }
   return 0
 }

@@ -60,8 +60,18 @@ export function buildInputCommandSequence(
           String(action.durationMs ?? 400),
         ],
       ], timing)
-    case 'input_text':
-      return withActionSettle([['input', 'text', escapeInputText(action.text)]], timing)
+    case 'input_text': {
+      const sequence: DeviceCommandStep[] = action.clear
+        ? [
+            ['input', 'keycombination', 'KEYCODE_CTRL_LEFT', 'KEYCODE_A'],
+            { waitMs: timing.keyboardStepMs },
+            ['input', 'keyevent', 'KEYCODE_DEL'],
+            { waitMs: timing.keyboardStepMs },
+          ]
+        : []
+      sequence.push(['input', 'text', escapeInputText(action.text)])
+      return withActionSettle(sequence, timing)
+    }
     case 'key':
       return withActionSettle([['input', 'keyevent', keyToAndroidKeyCode(action.key)]], timing)
     case 'back':
@@ -86,8 +96,10 @@ export function buildInputCommandSequence(
         { waitMs: timing.doubleTapIntervalMs },
         ['input', 'tap', String(action.x), String(action.y)],
       ], timing)
-    case 'call_api':
     case 'interact':
+      throw new DeviceBackendError(`Manual interaction required: ${action.message}`)
+    case 'call_api':
+      throw new DeviceBackendError(`Unsupported call_api action: ${action.instruction}`)
     case 'note':
     case 'take_over':
     case 'wait':

@@ -12,6 +12,7 @@ export type DeviceOptionsSectionProps = {
   onDoubleTapIntervalMsChange: (value: number) => void
   onKeyboardStepMsChange: (value: number) => void
   onPreferAdbKeyboardChange: (value: boolean) => void
+  sectionId?: string
 }
 
 export function DeviceOptionsSection({
@@ -26,9 +27,10 @@ export function DeviceOptionsSection({
   onDoubleTapIntervalMsChange,
   onKeyboardStepMsChange,
   onPreferAdbKeyboardChange,
+  sectionId,
 }: DeviceOptionsSectionProps) {
   return (
-    <details className="compact-section">
+    <details className="compact-section" id={sectionId}>
       <summary>{copy.deviceOptions}</summary>
       <div className="device-options-panel">
         <label className="toggle">

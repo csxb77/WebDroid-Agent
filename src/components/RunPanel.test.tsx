@@ -1,33 +1,44 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { DeviceScreenshot } from '../adapters/deviceTypes'
 import type { AgentStep } from '../lib/agent'
+import type { AgentAction } from '../lib/actionTypes'
 import { APP_COPY } from '../lib/appCopy'
+import {
+  createAgentThread,
+  recordThreadTurnExecution,
+  startThreadTurn,
+} from '../lib/agentThread'
+import { buildInteractionStream } from '../lib/interactionStream'
 import { RunPanel } from './RunPanel'
+
+const screenshot: DeviceScreenshot = {
+  bytes: new Uint8Array([1, 2, 3]),
+  dataUrl: 'data:image/png;base64,abc',
+  screen: { width: 1080, height: 2400 },
+}
 
 function renderRunPanel(overrides: Partial<Parameters<typeof RunPanel>[0]> = {}) {
   const props: Parameters<typeof RunPanel>[0] = {
-    autoExecute: false,
+    activeThreadId: 'thread-current',
     busyTask: null,
-    canRun: false,
     chatInput: '',
     conversation: [],
     copy: APP_COPY['en-US'],
-    logsCount: 0,
-    onAutoExecuteChange: vi.fn(),
+    historySidebarOpen: false,
     onChatInputChange: vi.fn(),
+    onCloseHistorySidebar: vi.fn(),
+    onDeleteThread: vi.fn(),
     onExecutePendingStep: vi.fn(),
-    onExportRunLog: vi.fn(),
-    onPlanNextStep: vi.fn(),
-    onResetSession: vi.fn(),
-    onRunAutoLoop: vi.fn(),
+    onSelectThread: vi.fn(),
     onStartNewChat: vi.fn(),
     onStopRun: vi.fn(),
     onSubmitChatMessage: vi.fn(),
-    onTaskTemplateSelect: vi.fn(),
+    onToggleHistorySidebar: vi.fn(),
     pendingStep: null,
-    taskTemplates: [],
+    threadSummaries: [],
     ...overrides,
   }
 
@@ -39,21 +50,88 @@ describe('RunPanel', () => {
     cleanup()
   })
 
-  it('keeps chat, conversation management, and agent run actions in separate regions', () => {
+  it('keeps the chat composer in the chat region without advanced debug controls', () => {
     renderRunPanel()
 
     const title = screen.getByRole('heading', { name: 'Chat' }).closest('.panel-title')
     expect(title).toBeTruthy()
     expect(within(title as HTMLElement).getByRole('button', { name: /new chat/i })).toBeTruthy()
+    expect(within(title as HTMLElement).getByRole('button', { name: /open history sidebar/i })).toBeTruthy()
 
     const sendButton = screen.getByRole('button', { name: /^send$/i })
-    expect(sendButton.closest('.composer-actions')).toBeTruthy()
-    expect(sendButton.closest('.agent-run-actions')).toBeNull()
+    expect(sendButton.closest('.chat-composer')).toBeTruthy()
+    expect(sendButton.closest('.chat-input-actions')).toBeTruthy()
+    expect(document.querySelector('.chat-empty')).toBeNull()
+    expect(screen.queryByText('Advanced/debug')).toBeNull()
+    expect(screen.queryByRole('button', { name: /plan next step/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /run agent/i })).toBeNull()
+  })
 
-    const runButton = screen.getByRole('button', { name: /plan next step/i })
-    expect(runButton.closest('.agent-run-actions')).toBeTruthy()
-    expect(runButton.className).toContain('primary')
-    expect(screen.queryByRole('button', { name: /^run$/i })).toBeNull()
+  it('opens the AMC-style chat history sidebar and routes history actions', () => {
+    const onCloseHistorySidebar = vi.fn()
+    const onDeleteThread = vi.fn()
+    const onSelectThread = vi.fn()
+    const onStartNewChat = vi.fn()
+    renderRunPanel({
+      activeThreadId: 'thread-2',
+      historySidebarOpen: true,
+      onCloseHistorySidebar,
+      onDeleteThread,
+      onSelectThread,
+      onStartNewChat,
+      threadSummaries: [
+        {
+          id: 'thread-2',
+          title: 'Second task',
+          task: 'Second task',
+          status: 'idle',
+          createdAt: 2000,
+          updatedAt: 2000,
+        },
+        {
+          id: 'thread-1',
+          title: 'First task',
+          task: 'First task',
+          status: 'idle',
+          createdAt: 1000,
+          updatedAt: 1000,
+        },
+      ],
+    })
+
+    const sidebar = screen.getByRole('complementary', { name: /history/i })
+    expect(sidebar).toBeTruthy()
+    expect(screen.getByRole('heading', { name: /recent chats/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /open chat second task/i }).getAttribute('aria-current')).toBe('page')
+
+    fireEvent.change(screen.getByRole('textbox', { name: /search chat history/i }), {
+      target: { value: 'first' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /open chat first task/i }))
+    expect(onSelectThread).toHaveBeenCalledWith('thread-1')
+
+    fireEvent.click(screen.getByRole('button', { name: /delete chat first task/i }))
+    expect(onDeleteThread).toHaveBeenCalledWith('thread-1')
+
+    fireEvent.click(within(sidebar).getByRole('button', { name: /^new chat$/i }))
+    expect(onStartNewChat).toHaveBeenCalledTimes(1)
+    expect(onCloseHistorySidebar).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns focus to the chat input after starting a new chat', () => {
+    const onStartNewChat = vi.fn()
+    renderRunPanel({ onStartNewChat })
+
+    const newChatButton = screen.getByRole('button', { name: /new chat/i })
+    const input = screen.getByRole('textbox', { name: /chat message/i })
+
+    newChatButton.focus()
+    expect(document.activeElement).toBe(newChatButton)
+
+    fireEvent.click(newChatButton)
+
+    expect(onStartNewChat).toHaveBeenCalledTimes(1)
+    expect(document.activeElement).toBe(input)
   })
 
   it('renders the conversation as a persistent chat stream with a bottom composer', () => {
@@ -84,53 +162,114 @@ describe('RunPanel', () => {
     )
   })
 
-  it('shows exactly one primary agent action for the selected run mode', () => {
-    renderRunPanel({ autoExecute: false, canRun: true })
-
-    const manualPrimaryButtons = document.querySelectorAll('.agent-run-actions button.primary')
-    expect(manualPrimaryButtons).toHaveLength(1)
-    expect(screen.getByRole('button', { name: /plan next step/i })).toBeTruthy()
-
-    cleanup()
-    renderRunPanel({ autoExecute: true, canRun: true })
-
-    const autoPrimaryButtons = document.querySelectorAll('.agent-run-actions button.primary')
-    expect(autoPrimaryButtons).toHaveLength(1)
-    expect(screen.getByRole('button', { name: /run agent/i })).toBeTruthy()
-  })
-
-  it('shows the running state from a stable busy id instead of the display label', () => {
+  it('renders chat messages as sanitized markdown', () => {
     renderRunPanel({
-      autoExecute: true,
-      busyTask: { id: 'run-agent' },
-      canRun: false,
+      conversation: [
+        {
+          id: 'a1',
+          role: 'assistant',
+          content: '## Result\n\n- **Done**\n\n[Docs](https://example.com)\n\n<script>alert(1)</script>',
+        },
+      ],
     })
 
-    expect(screen.getByRole('button', { name: /running/i })).toBeTruthy()
+    const chatStream = screen.getByLabelText('Conversation')
+    const heading = within(chatStream).getByRole('heading', { name: 'Result' })
+    const strong = within(chatStream).getByText('Done')
+    const link = within(chatStream).getByRole('link', { name: 'Docs' })
+
+    expect(heading.tagName).toBe('H2')
+    expect(strong.tagName).toBe('STRONG')
+    expect(link.getAttribute('href')).toBe('https://example.com')
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(chatStream.querySelector('script')).toBeNull()
   })
 
-  it('keeps a stop control visible in the primary run actions while busy', () => {
-    renderRunPanel({
-      autoExecute: true,
-      busyTask: { id: 'run-agent' },
-      canRun: false,
+  it('renders agent steps with their execution result in the chat stream', () => {
+    const thread = createAgentThread('Open Wi-Fi settings', { now: 1000 })
+    const action: AgentAction = { action: 'tap', x: 120, y: 240, reason: 'open Wi-Fi' }
+    const turn = startThreadTurn(thread, {
+      id: 'turn-1',
+      index: 1,
+      task: 'Open Wi-Fi settings',
+      latestUserMessage: 'Open Wi-Fi settings',
+      promptContext: 'Task: Open Wi-Fi settings',
+      modelOutput: '{"action":"tap","x":120,"y":240}',
+      action,
+      executionAction: action,
+      preview: 'tap (120, 240) - open Wi-Fi',
+      deviceSnapshot: {
+        currentApp: 'Settings',
+        deviceState: { app: 'Settings', packageName: 'com.android.settings' },
+        screenshot,
+      },
+      timing: { captureMs: 1, currentAppMs: 2, modelMs: 3, parseMs: 4, totalMs: 10 },
+      now: 1100,
+    })
+    recordThreadTurnExecution(thread, turn.id, {
+      executionResult: 'input tap 120 240',
+      success: true,
+      now: 1200,
     })
 
-    const stopButton = screen.getByRole('button', { name: /^stop$/i })
+    renderRunPanel({
+      conversation: thread.messages,
+      interactionItems: buildInteractionStream(thread),
+    })
 
-    expect(stopButton.closest('.agent-run-actions')).toBeTruthy()
-    expect(stopButton.hasAttribute('disabled')).toBe(false)
+    const chatStream = screen.getByLabelText('Conversation')
+    const step = within(chatStream).getByLabelText('Step 1')
+
+    expect(within(step).getByText('Executed')).toBeTruthy()
+    expect(within(step).getByText('tap (120, 240) - open Wi-Fi')).toBeTruthy()
+    expect(within(step).getByText('input tap 120 240')).toBeTruthy()
+    expect(within(chatStream).queryAllByText('input tap 120 240')).toHaveLength(1)
   })
 
-  it('explains disabled chat and run actions without showing an inert execute button', () => {
+  it('submits chat with Enter while keeping Shift Enter for multiline input', () => {
+    const onSubmitChatMessage = vi.fn()
+    renderRunPanel({
+      chatInput: 'Open Wi-Fi settings',
+      onSubmitChatMessage,
+    })
+
+    const input = screen.getByRole('textbox', { name: /chat message/i })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSubmitChatMessage).toHaveBeenCalledTimes(1)
+
+    fireEvent.keyDown(input, { key: 'Enter', shiftKey: true })
+    expect(onSubmitChatMessage).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a stop button in the send position while the agent run is active', () => {
+    const onStopRun = vi.fn()
+    const onSubmitChatMessage = vi.fn()
+    renderRunPanel({
+      busyTask: { id: 'run-agent' },
+      chatInput: 'Queue this after stop',
+      onStopRun,
+      onSubmitChatMessage,
+    })
+
+    expect(screen.queryByRole('button', { name: /^send$/i })).toBeNull()
+
+    const stopButton = screen.getByRole('button', { name: /^stop run$/i })
+    expect(stopButton.closest('.chat-composer')).toBeTruthy()
+    fireEvent.click(stopButton)
+
+    expect(onStopRun).toHaveBeenCalledTimes(1)
+    expect(onSubmitChatMessage).not.toHaveBeenCalled()
+  })
+
+  it('explains disabled chat without showing advanced run actions or an inert execute button', () => {
     renderRunPanel()
 
     expect(screen.getByRole('button', { name: /^send$/i }).getAttribute('title')).toBe(
       'Type a message first.',
     )
-    expect(screen.getByRole('button', { name: /plan next step/i }).getAttribute('title')).toBe(
-      'Connect a device, configure the model, and send or choose a task first.',
-    )
+    expect(screen.queryByText('Advanced/debug')).toBeNull()
+    expect(screen.queryByRole('button', { name: /plan next step/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /run agent/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /^execute$/i })).toBeNull()
   })
 
@@ -138,6 +277,13 @@ describe('RunPanel', () => {
     renderRunPanel()
 
     expect(screen.queryByLabelText(/max steps/i)).toBeNull()
+  })
+
+  it('does not render task template controls', () => {
+    renderRunPanel()
+
+    expect(screen.queryByText('Task template')).toBeNull()
+    expect(screen.queryByLabelText(/task template/i)).toBeNull()
   })
 
   it('hides the pending action panel when there is no pending step', () => {

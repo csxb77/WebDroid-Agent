@@ -1,7 +1,6 @@
 import {
   CircleHelp,
   CircleStop,
-  Download,
   KeyRound,
   Link,
   ScanEye,
@@ -29,20 +28,24 @@ export type DevicePanelProps = {
   copy: AppCopy
   currentApp: string
   deviceInfo: DeviceInfo | null
+  deviceOptionsSectionId?: string
+  deviceSectionId?: string
+  directCommandsSectionId?: string
   doctorResults: DoctorCheckResult[]
+  doctorSectionId?: string
   deviceState: DeviceState
   doubleTapIntervalMs: number
   installedApps: InstalledApp[]
+  installedAppsSectionId?: string
   keyboardStepMs: number
   preferAdbKeyboard: boolean
   onActionSettleMsChange: (value: number) => void
   onCaptureScreen: () => void
   onConfirmSensitiveActionsChange: (value: boolean) => void
+  onConfigureAdbKeyboard: () => void
   onConnectDevice: () => void
   onDisconnectDevice: () => void
   onDoubleTapIntervalMsChange: (value: number) => void
-  onEnableAdbKeyboard: () => void
-  onInstallAdbKeyboard: () => void
   onKeyboardStepMsChange: (value: number) => void
   onLaunchInstalledApp: (app: InstalledApp) => void
   onPreferAdbKeyboardChange: (value: boolean) => void
@@ -58,19 +61,23 @@ export function DevicePanel({
   copy,
   currentApp,
   deviceInfo,
+  deviceOptionsSectionId,
+  deviceSectionId,
+  directCommandsSectionId,
   doctorResults,
+  doctorSectionId,
   deviceState,
   doubleTapIntervalMs,
   installedApps,
+  installedAppsSectionId,
   keyboardStepMs,
   onActionSettleMsChange,
   onCaptureScreen,
   onConfirmSensitiveActionsChange,
+  onConfigureAdbKeyboard,
   onConnectDevice,
   onDisconnectDevice,
   onDoubleTapIntervalMsChange,
-  onEnableAdbKeyboard,
-  onInstallAdbKeyboard,
   onKeyboardStepMsChange,
   onLaunchInstalledApp,
   onPreferAdbKeyboardChange,
@@ -82,99 +89,100 @@ export function DevicePanel({
 
   return (
     <>
-      <div className="panel-title">
-        <Usb size={18} />
-        <h2>{copy.device}</h2>
-      </div>
-      <div className="device-box">
-        <span>{deviceInfo?.name || copy.noDevice}</span>
-        {connected && deviceInfo ? (
-          <details className="device-details">
-            <summary>{copy.deviceDetails}</summary>
-            <small>{copy.serial}: {deviceInfo.serial}</small>
-            <small>{copy.currentApp}: {currentApp}</small>
-            {deviceState.packageName ? (
-              <small>{copy.package}: {deviceState.packageName}</small>
-            ) : null}
-            {deviceState.activity ? <small>{copy.activity}: {deviceState.activity}</small> : null}
-            {deviceState.keyboard ? <small>{copy.keyboard}: {deviceState.keyboard}</small> : null}
-          </details>
-        ) : (
-          <>
-            <small>{copy.usbDebuggingRequired}</small>
-            <small>{copy.currentApp}: {currentApp}</small>
-          </>
-        )}
-      </div>
-      <div className="adb-connect-row">
-        <div className="button-row">
-          <button type="button" onClick={onConnectDevice} disabled={isBusy || connected}>
-            <Link size={16} />
-            {copy.connect}
-          </button>
-          <button type="button" onClick={onDisconnectDevice} disabled={isBusy || !connected}>
-            <CircleStop size={16} />
-            {copy.disconnect}
-          </button>
+      <section className="config-panel-group" id={deviceSectionId} aria-label={copy.device}>
+        <div className="panel-title">
+          <Usb size={18} />
+          <h2>{copy.device}</h2>
         </div>
-        <span className="adb-help">
-          <button
-            type="button"
-            className="icon-button adb-help-trigger"
-            aria-label={copy.adbConnectionHelpLabel}
-            aria-describedby="adb-connection-help"
-            title={copy.adbConnectionHelpText}
-          >
-            <CircleHelp size={16} />
-          </button>
-          <span className="adb-help-tooltip" id="adb-connection-help" role="tooltip">
-            {copy.adbConnectionHelpText}
+        <div className="device-box">
+          <span>{deviceInfo?.name || copy.noDevice}</span>
+          {connected && deviceInfo ? (
+            <details className="device-details">
+              <summary>{copy.deviceDetails}</summary>
+              <small>{copy.serial}: {deviceInfo.serial}</small>
+              <small>{copy.currentApp}: {currentApp}</small>
+              {deviceState.packageName ? (
+                <small>{copy.package}: {deviceState.packageName}</small>
+              ) : null}
+              {deviceState.activity ? <small>{copy.activity}: {deviceState.activity}</small> : null}
+              {deviceState.keyboard ? <small>{copy.keyboard}: {deviceState.keyboard}</small> : null}
+            </details>
+          ) : (
+            <>
+              <small>{copy.usbDebuggingRequired}</small>
+              <small>{copy.currentApp}: {currentApp}</small>
+            </>
+          )}
+        </div>
+        <div className="adb-connect-row">
+          <div className="button-row">
+            <button type="button" onClick={onConnectDevice} disabled={isBusy || connected}>
+              <Link size={16} />
+              {copy.connect}
+            </button>
+            <button type="button" onClick={onDisconnectDevice} disabled={isBusy || !connected}>
+              <CircleStop size={16} />
+              {copy.disconnect}
+            </button>
+          </div>
+          <span className="adb-help">
+            <button
+              type="button"
+              className="icon-button adb-help-trigger"
+              aria-label={copy.adbConnectionHelpLabel}
+              aria-describedby="adb-connection-help"
+              title={copy.adbConnectionHelpText}
+            >
+              <CircleHelp size={16} />
+            </button>
+            <span className="adb-help-tooltip" id="adb-connection-help" role="tooltip">
+              {copy.adbConnectionHelpText}
+            </span>
           </span>
-        </span>
-      </div>
-      <button
-        type="button"
-        className="wide"
-        onClick={onCaptureScreen}
-        disabled={isBusy || !connected}
-      >
-        <ScanEye size={16} />
-        {copy.capture}
-      </button>
-      <button
-        type="button"
-        className="wide"
-        onClick={onInstallAdbKeyboard}
-        disabled={isBusy || !connected}
-      >
-        <Download size={16} />
-        {copy.installAdbKeyboard}
-      </button>
-      <button
-        type="button"
-        className="wide"
-        onClick={onEnableAdbKeyboard}
-        disabled={isBusy || !connected}
-      >
-        <KeyRound size={16} />
-        {copy.enableAdbKeyboard}
-      </button>
-      <button type="button" className="wide" onClick={onRunDoctor} disabled={isBusy}>
-        <Stethoscope size={16} />
-        {copy.runDoctor}
-      </button>
+        </div>
+        <button
+          type="button"
+          className="wide"
+          onClick={onCaptureScreen}
+          disabled={isBusy || !connected}
+        >
+          <ScanEye size={16} />
+          {copy.capture}
+        </button>
+        <button
+          type="button"
+          className="wide"
+          onClick={onConfigureAdbKeyboard}
+          disabled={isBusy || !connected}
+        >
+          <KeyRound size={16} />
+          {copy.configureTextInput}
+        </button>
+        <button
+          type="button"
+          className="wide"
+          id={doctorSectionId}
+          onClick={onRunDoctor}
+          disabled={isBusy}
+        >
+          <Stethoscope size={16} />
+          {copy.runDoctor}
+        </button>
+      </section>
       <InstalledAppsSection
         busyTask={busyTask}
         connected={connected}
         copy={copy}
         installedApps={installedApps}
         onLaunchInstalledApp={onLaunchInstalledApp}
+        sectionId={installedAppsSectionId}
       />
       <DirectCommandsSection
         busyTask={busyTask}
         connected={connected}
         copy={copy}
         onRunDirectAction={onRunDirectAction}
+        sectionId={directCommandsSectionId}
       />
       {doctorResults.length > 0 ? (
         <details className="compact-section">
@@ -207,6 +215,7 @@ export function DevicePanel({
         onKeyboardStepMsChange={onKeyboardStepMsChange}
         onPreferAdbKeyboardChange={onPreferAdbKeyboardChange}
         preferAdbKeyboard={preferAdbKeyboard}
+        sectionId={deviceOptionsSectionId}
       />
     </>
   )

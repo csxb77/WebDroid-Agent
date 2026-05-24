@@ -13,7 +13,10 @@ export function buildActionPreview(action: AgentAction): string {
         action.durationMs ?? 400
       }ms${suffix}`
     case 'input_text':
-      return `input text "${truncate(action.text, 48)}"${suffix}`
+      return `${action.clear ? 'replace text with' : 'input text'} "${truncate(
+        action.text,
+        48,
+      )}"${suffix}`
     case 'key':
       return `press ${action.key}${suffix}`
     case 'back':

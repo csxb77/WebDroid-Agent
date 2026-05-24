@@ -112,8 +112,12 @@ describe('mapActionCoordinates', () => {
 
   it('leaves non-coordinate actions unchanged', () => {
     expect(
-      mapActionCoordinates({ action: 'input_text', text: 'hello' }, modelScreen, deviceScreen),
-    ).toEqual({ action: 'input_text', text: 'hello' })
+      mapActionCoordinates(
+        { action: 'input_text', text: 'hello', clear: true },
+        modelScreen,
+        deviceScreen,
+      ),
+    ).toEqual({ action: 'input_text', text: 'hello', clear: true })
   })
 })
 

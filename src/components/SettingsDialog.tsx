@@ -1,4 +1,14 @@
-import { AlertTriangle, Code2, ExternalLink, Gauge, GitFork, Languages, Monitor, Star } from 'lucide-react'
+import {
+  AlertTriangle,
+  Code2,
+  ExternalLink,
+  Gauge,
+  GitFork,
+  Languages,
+  Monitor,
+  Star,
+  X,
+} from 'lucide-react'
 import type { AppCopy } from '../lib/appCopy'
 import { REPOSITORY_URL, type RepositoryStats } from '../lib/repository'
 import type { LanguageMode, ThemeMode } from '../lib/settings'
@@ -44,11 +54,12 @@ export function SettingsDialog({
           </div>
           <button
             type="button"
-            className="settings-close"
+            className="icon-button"
             onClick={onClose}
             aria-label={copy.closeSettings}
+            title={copy.closeSettings}
           >
-            {copy.close}
+            <X size={16} />
           </button>
         </div>
         <label className="settings-field">

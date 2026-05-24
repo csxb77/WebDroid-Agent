@@ -14,6 +14,7 @@ export type InstalledAppsSectionProps = {
   copy: AppCopy
   installedApps: InstalledApp[]
   onLaunchInstalledApp: (app: InstalledApp) => void
+  sectionId?: string
 }
 
 export function InstalledAppsSection({
@@ -22,11 +23,12 @@ export function InstalledAppsSection({
   copy,
   installedApps,
   onLaunchInstalledApp,
+  sectionId,
 }: InstalledAppsSectionProps) {
   const [appSearch, setAppSearch] = useState('')
 
   const isBusy = Boolean(busyTask)
-  const directDisabled = isBusy || !connected
+  const launchDisabled = isBusy || !connected
   const normalizedAppSearch = appSearch.trim().toLowerCase()
   const visibleApps = installedApps.filter((app) => {
     if (!normalizedAppSearch) {
@@ -39,7 +41,7 @@ export function InstalledAppsSection({
   })
 
   return (
-    <details className="compact-section">
+    <details className="compact-section" id={sectionId}>
       <summary>{copy.installedApps}</summary>
       <section className="installed-app-panel" aria-label={copy.installedApps}>
         <label className="search-field">
@@ -60,7 +62,7 @@ export function InstalledAppsSection({
               return (
                 <article
                   className="installed-app-row"
-                  key={`${app.packageName}:${app.activity ?? ''}`}
+                  key={app.packageName}
                 >
                   <div>
                     <strong>{appName}</strong>
@@ -70,7 +72,7 @@ export function InstalledAppsSection({
                     type="button"
                     aria-label={copy.launchInstalledApp(appName)}
                     onClick={() => onLaunchInstalledApp(app)}
-                    disabled={directDisabled}
+                    disabled={launchDisabled}
                   >
                     <Play size={15} />
                     {copy.launchApp}

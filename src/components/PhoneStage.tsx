@@ -1,5 +1,12 @@
 import { Check, Maximize2, Minimize2, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react'
-import { useEffect, useState, type MouseEvent, type WheelEvent } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+  type WheelEvent,
+} from 'react'
 import { buildActionPreview } from '../lib/actionPreview'
 import type { AgentAction } from '../lib/actionTypes'
 import type { AppCopy } from '../lib/appCopy'
@@ -23,11 +30,20 @@ export function PhoneStage({
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null)
   const [zoom, setZoom] = useState(1)
   const [fullscreen, setFullscreen] = useState(false)
+  const screenshotLayerRef = useRef<HTMLSpanElement | null>(null)
+  const [screenshotButtonSize, setScreenshotButtonSize] = useState<{
+    width: number
+    height: number
+  } | null>(null)
   const hasScreenshot = displayedScreenshot !== null
   const isFullscreenPreview = hasScreenshot && fullscreen
   const stageLabel = displayedScreenshot ? copy.androidScreenshot : copy.noScreenshot
   const zoomPercent = Math.round(zoom * 100)
   const surfacePercent = hasScreenshot ? zoomPercent : 100
+  const screenshotLayerStyle =
+    displayedScreenshot && screenshotButtonSize
+      ? containedImageLayerStyle(displayedScreenshot.screen, screenshotButtonSize)
+      : undefined
 
   useEffect(() => {
     if (!isFullscreenPreview) {
@@ -49,6 +65,46 @@ export function PhoneStage({
       window.removeEventListener('keydown', onKeyDown)
     }
   }, [isFullscreenPreview])
+
+  useEffect(() => {
+    if (!displayedScreenshot) {
+      return
+    }
+
+    const layer = screenshotLayerRef.current
+    const container = layer?.parentElement
+    if (!container) {
+      return
+    }
+
+    const updateSize = (rect?: DOMRectReadOnly) => {
+      const measured = rect ?? container.getBoundingClientRect()
+      if (measured.width <= 0 || measured.height <= 0) {
+        return
+      }
+      setScreenshotButtonSize((current) =>
+        current?.width === measured.width && current.height === measured.height
+          ? current
+          : { width: measured.width, height: measured.height },
+      )
+    }
+
+    updateSize()
+
+    if (typeof ResizeObserver === 'undefined') {
+      const handleResize = () => updateSize()
+      window.addEventListener('resize', handleResize)
+      return () => {
+        window.removeEventListener('resize', handleResize)
+      }
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      updateSize(entries[0]?.contentRect)
+    })
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [displayedScreenshot])
 
   function pointerToScreenPoint(event: MouseEvent<HTMLElement>) {
     if (!displayedScreenshot) {
@@ -139,26 +195,32 @@ export function PhoneStage({
                   closeLabel={copy.closeScreenshotPreview}
                   thumbnailClassName="phone-screenshot-button"
                 >
-                  {pendingStep ? (
-                    <ActionOverlay action={pendingStep.action} screen={displayedScreenshot.screen} />
-                  ) : null}
-                  {draftAction ? (
-                    <ActionOverlay action={draftAction} screen={displayedScreenshot.screen} />
-                  ) : null}
-                  {onRunInteractiveAction ? (
-                    <span
-                      aria-label={copy.screenshotInteractionLayer}
-                      className="screenshot-command-layer"
-                      role="presentation"
-                      onClick={(event) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                      }}
-                      onMouseDown={startInteraction}
-                      onMouseLeave={() => setDragStart(null)}
-                      onMouseUp={finishInteraction}
-                    />
-                  ) : null}
+                  <span
+                    className="screenshot-visible-layer"
+                    ref={screenshotLayerRef}
+                    style={screenshotLayerStyle}
+                  >
+                    {pendingStep ? (
+                      <ActionOverlay action={pendingStep.action} screen={displayedScreenshot.screen} />
+                    ) : null}
+                    {draftAction ? (
+                      <ActionOverlay action={draftAction} screen={displayedScreenshot.screen} />
+                    ) : null}
+                    {onRunInteractiveAction ? (
+                      <span
+                        aria-label={copy.screenshotInteractionLayer}
+                        className="screenshot-command-layer"
+                        role="presentation"
+                        onClick={(event) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                        }}
+                        onMouseDown={startInteraction}
+                        onMouseLeave={() => setDragStart(null)}
+                        onMouseUp={finishInteraction}
+                      />
+                    ) : null}
+                  </span>
                 </ScreenshotLightbox>
               ) : (
                 <div className="phone-screen-placeholder" aria-hidden="true" />
@@ -241,6 +303,49 @@ function previewInteractiveAction(action: AgentAction) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
+}
+
+function containedImageLayerStyle(
+  screen: { width: number; height: number },
+  container: { width: number; height: number },
+): CSSProperties {
+  if (screen.width <= 0 || screen.height <= 0 || container.width <= 0 || container.height <= 0) {
+    return {}
+  }
+
+  const imageAspect = screen.width / screen.height
+  const containerAspect = container.width / container.height
+
+  if (Math.abs(containerAspect - imageAspect) < 0.0001) {
+    return {
+      height: '100%',
+      left: '0%',
+      top: '0%',
+      width: '100%',
+    }
+  }
+
+  if (containerAspect > imageAspect) {
+    const width = (imageAspect / containerAspect) * 100
+    return {
+      height: '100%',
+      left: percent((100 - width) / 2),
+      top: '0%',
+      width: percent(width),
+    }
+  }
+
+  const height = (containerAspect / imageAspect) * 100
+  return {
+    height: percent(height),
+    left: '0%',
+    top: percent((100 - height) / 2),
+    width: '100%',
+  }
+}
+
+function percent(value: number) {
+  return `${Math.round(value * 10000) / 10000}%`
 }
 
 type ActionOverlayProps = {

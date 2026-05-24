@@ -47,7 +47,7 @@ export function buildSystemPrompt() {
       '{"action":"swipe","fromX":number,"fromY":number,"toX":number,"toY":number,',
       '"durationMs":number,"reason":"short reason"}',
     ].join(''),
-    '{"action":"input_text","text":"Unicode text to type","reason":"short reason"}',
+    '{"action":"input_text","text":"Unicode text to type","clear":boolean,"reason":"short reason"}',
     '{"action":"key","key":"BACK|HOME|ENTER|POWER|APP_SWITCH|MENU","reason":"short reason"}',
     '{"action":"back","reason":"short reason"}',
     '{"action":"home","reason":"short reason"}',
@@ -55,10 +55,12 @@ export function buildSystemPrompt() {
     '{"action":"double_tap","x":number,"y":number,"reason":"short reason"}',
     '{"action":"wait","ms":number,"reason":"short reason"}',
     '{"action":"take_over","message":"what the human must do"}',
-    '{"action":"interact","message":"what choice is needed from the human"}',
     '{"action":"note","message":"short observation"}',
-    '{"action":"call_api","instruction":"summarize or analyze recorded notes"}',
     '{"action":"done","summary":"what was completed"}',
+    [
+      'Use input_text with clear:true when replacing text in a search, address,',
+      'or already-filled field; omit clear or set clear:false only when appending.',
+    ].join(' '),
     [
       'For canonical JSON touch coordinates, use screenshot pixel coordinates from the attached image.',
       'Major grid lines may be labeled with x/y pixel values;',

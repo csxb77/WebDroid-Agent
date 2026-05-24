@@ -16,6 +16,7 @@ export type DirectCommandsSectionProps = {
   connected: boolean
   copy: AppCopy
   onRunDirectAction: (action: AgentAction) => void
+  sectionId?: string
 }
 
 export function DirectCommandsSection({
@@ -23,6 +24,7 @@ export function DirectCommandsSection({
   connected,
   copy,
   onRunDirectAction,
+  sectionId,
 }: DirectCommandsSectionProps) {
   const [tapX, setTapX] = useState(0)
   const [tapY, setTapY] = useState(0)
@@ -36,7 +38,7 @@ export function DirectCommandsSection({
   const directDisabled = isBusy || !connected
 
   return (
-    <details className="compact-section">
+    <details className="compact-section" id={sectionId}>
       <summary>{copy.directCommands}</summary>
       <section className="direct-command-panel" aria-label={copy.directCommands}>
         <div className="direct-command-grid two">

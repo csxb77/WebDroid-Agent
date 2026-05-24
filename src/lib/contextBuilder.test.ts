@@ -17,6 +17,7 @@ describe('context builder', () => {
     startThreadTurn(thread, {
       id: 'turn-1',
       index: 1,
+      status: 'executed',
       task: 'Open Settings',
       latestUserMessage: 'Open Settings',
       promptContext: 'old prompt',
@@ -66,12 +67,28 @@ describe('context builder', () => {
     expect(context.text).toContain('Step 1')
   })
 
+  it('includes the full installed app list in prompt context', () => {
+    const installedApps = Array.from({ length: 45 }, (_, index) => ({
+      packageName: `com.example.app${index}`,
+    }))
+
+    const context = buildAgentPromptContext({
+      task: 'Open app44',
+      screen: { width: 1080, height: 2400 },
+      installedApps,
+    })
+
+    expect(context.text).toContain('app44: com.example.app44')
+    expect(context.text).toContain('app0: com.example.app0')
+  })
+
   it('uses only recent turns for prompt history', () => {
     const thread = createAgentThread('Scroll list', { id: 'thread-recent', now: 1000 })
     for (let index = 1; index <= 5; index += 1) {
       startThreadTurn(thread, {
         id: `turn-${index}`,
         index,
+        status: 'executed',
         task: 'Scroll list',
         promptContext: 'prompt',
         modelOutput: '{"action":"wait","ms":100}',
@@ -99,6 +116,7 @@ describe('context builder', () => {
       startThreadTurn(thread, {
         id: `turn-${index}`,
         index,
+        status: 'executed',
         task: 'Find item',
         promptContext: 'prompt',
         modelOutput: '{"action":"wait","ms":100}',
@@ -129,5 +147,95 @@ describe('context builder', () => {
         compactedThroughStep: 4,
       }),
     )
+  })
+
+  it('keeps planned turns out of prompt history until they are executed', () => {
+    const thread = createAgentThread('Open Settings', { id: 'thread-planned', now: 1000 })
+    startThreadTurn(thread, {
+      id: 'turn-planned',
+      index: 1,
+      task: 'Open Settings',
+      promptContext: 'prompt',
+      modelOutput: '{"action":"tap","x":100,"y":200}',
+      action,
+      executionAction: action,
+      preview: 'tap (100, 200)',
+      deviceSnapshot: {
+        currentApp: 'Settings',
+        deviceState: { app: 'Settings' },
+      },
+      timing,
+      now: 1100,
+    })
+
+    const context = buildAgentPromptContext({
+      thread,
+      task: 'Open Settings',
+      screen: { width: 1080, height: 2400 },
+      currentApp: 'Settings',
+      deviceState: { app: 'Settings' },
+    })
+
+    expect(context.history).toEqual([])
+    expect(context.text).not.toContain('Previous steps:')
+  })
+
+  it('includes queued user steering separately from durable transcript messages', () => {
+    const context = buildAgentPromptContext({
+      task: 'Open Settings',
+      latestUserMessage: 'Open Bluetooth',
+      pendingUserMessages: ['Open Bluetooth', 'Then show paired devices'],
+      screen: { width: 1080, height: 2400 },
+      currentApp: 'Settings',
+      deviceState: { app: 'Settings' },
+    })
+
+    expect(context.text).toContain('<pending_user_messages>')
+    expect(context.text).toContain('- Open Bluetooth')
+    expect(context.text).toContain('- Then show paired devices')
+  })
+
+  it('does not count planned turns against the recent turn compaction window', () => {
+    const thread = createAgentThread('Find item', { id: 'thread-compact-planned', now: 1000 })
+    for (let index = 1; index <= 3; index += 1) {
+      startThreadTurn(thread, {
+        id: `turn-executed-${index}`,
+        index,
+        status: 'executed',
+        task: 'Find item',
+        promptContext: 'prompt',
+        modelOutput: '{"action":"wait","ms":100}',
+        action: { action: 'wait', ms: 100 },
+        executionAction: { action: 'wait', ms: 100 },
+        preview: `wait ${index}`,
+        deviceSnapshot: {
+          currentApp: 'Chrome',
+          deviceState: { app: 'Chrome' },
+        },
+        timing,
+        now: 1000 + index,
+      })
+    }
+    startThreadTurn(thread, {
+      id: 'turn-planned',
+      index: 4,
+      task: 'Find item',
+      promptContext: 'prompt',
+      modelOutput: '{"action":"tap","x":100,"y":200}',
+      action,
+      executionAction: action,
+      preview: 'tap (100, 200)',
+      deviceSnapshot: {
+        currentApp: 'Chrome',
+        deviceState: { app: 'Chrome' },
+      },
+      timing,
+      now: 1100,
+    })
+
+    const summary = compactThreadContext(thread, { keepRecentTurns: 3, now: 2000 })
+
+    expect(summary).toBeNull()
+    expect(thread.contextSummary).toBe('')
   })
 })

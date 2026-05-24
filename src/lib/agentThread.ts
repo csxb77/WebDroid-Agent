@@ -2,6 +2,8 @@ import type { DeviceScreenshot, DeviceState } from '../adapters/deviceTypes'
 import type { AgentAction } from './actionTypes'
 import type { AgentConversationMessage, AgentHistoryItem, ModelConfig } from './openAiTypes'
 
+const DEFAULT_THREAD_TITLE = 'New chat'
+
 export type AgentThreadStatus =
   | 'idle'
   | 'running'
@@ -91,6 +93,13 @@ export type AgentThreadEvent =
     }
   | {
       id: string
+      type: 'assistant_message'
+      messageId: string
+      message: string
+      createdAt: number
+    }
+  | {
+      id: string
       type: 'action_execution'
       turnId: string
       actionPreview: string
@@ -168,7 +177,7 @@ export function createAgentThread(
   const createdAt = options.now ?? Date.now()
   const thread: AgentThread = {
     id: options.id ?? createId('thread'),
-    title: task.trim() || 'New chat',
+    title: task.trim() || DEFAULT_THREAD_TITLE,
     status: 'idle',
     task,
     currentApp: 'Unknown',
@@ -216,7 +225,7 @@ export function recordThreadUserMessage(
   if (!thread.task.trim()) {
     thread.task = content
   }
-  if (!thread.title.trim() || thread.title === 'New chat') {
+  if (!thread.title.trim() || thread.title === DEFAULT_THREAD_TITLE) {
     thread.title = content
   }
   addThreadEvent(
@@ -342,7 +351,7 @@ export function recordThreadTurnExecution(
     thread.status = 'done'
     thread.progressSummary = turn.action.summary ?? turn.action.reason ?? 'Task completed.'
     if (thread.progressSummary) {
-      thread.messages.push(createConversationMessage('assistant', thread.progressSummary))
+      recordThreadAssistantMessage(thread, thread.progressSummary, { now })
     }
   }
 
@@ -365,6 +374,61 @@ export function recordThreadTurnExecution(
   return turn
 }
 
+export function recordThreadAssistantMessage(
+  thread: AgentThread,
+  message: string,
+  options: { now?: number } = {},
+) {
+  const content = message.trim()
+  if (!content) {
+    throw new Error('Cannot add an empty assistant message.')
+  }
+
+  const now = options.now ?? Date.now()
+  const entry = createConversationMessage('assistant', content)
+  thread.messages.push(entry)
+  addThreadEvent(
+    thread,
+    {
+      type: 'assistant_message',
+      messageId: entry.id,
+      message: content,
+    },
+    { now },
+  )
+  return entry
+}
+
+export function recordThreadFinalResponse(
+  thread: AgentThread,
+  message: string,
+  options: { now?: number } = {},
+) {
+  const content = message.trim()
+  if (!content) {
+    throw new Error('Cannot add an empty final response.')
+  }
+
+  const lastMessage = thread.messages.at(-1)
+  if (
+    lastMessage?.role === 'assistant' &&
+    (!thread.progressSummary || lastMessage.content === thread.progressSummary)
+  ) {
+    lastMessage.content = content
+    const event = thread.events.find(
+      (candidate) =>
+        candidate.type === 'assistant_message' && candidate.messageId === lastMessage.id,
+    )
+    if (event?.type === 'assistant_message') {
+      event.message = content
+    }
+    touchThread(thread, options.now)
+    return lastMessage
+  }
+
+  return recordThreadAssistantMessage(thread, content, options)
+}
+
 export function addThreadEvent(
   thread: AgentThread,
   event: AgentThreadEventInput,
@@ -375,7 +439,7 @@ export function addThreadEvent(
     ...event,
     id: createId('event'),
     createdAt: now,
-  } as unknown as AgentThreadEvent
+  } as AgentThreadEvent
   thread.events.push(entry)
   if (entry.type === 'status_change') {
     thread.status = entry.status

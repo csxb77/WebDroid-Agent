@@ -8,25 +8,28 @@
   <a href="./README.md">中文</a> | <a href="./README.en-US.md">English</a>
 </p>
 
-WebDroid Agent is a fully frontend Android phone agent experiment. It connects to an Android device from the browser through WebUSB/WebADB, captures the device screen, sends it to an OpenAI-compatible vision model, then parses, validates, and executes the model's constrained action through ADB.
+WebDroid Agent is a browser-first Android phone agent experiment. In static deployments, it runs entirely on the frontend. It connects to an Android device from the browser through WebUSB/WebADB, captures the device screen, sends it to an OpenAI-compatible vision model, then parses, validates, and executes the model's constrained action through ADB. Docker deployments add a local Node API proxy so model requests go through the container instead of directly from the browser.
 
 The goal is not to replace long-running human supervision. It is a local browser environment for quickly validating the vision-model-plus-phone-control loop.
 
 ```text
 Chromium WebUSB -> Tango/WebADB -> Android ADB
-browser fetch -> OpenAI-compatible /v1/chat/completions -> vision model
+Static deployment: browser fetch -> OpenAI-compatible /v1/chat/completions -> vision model
+Docker: browser fetch -> same-origin local proxy -> OpenAI-compatible /v1/chat/completions -> vision model
 ```
 
 ## What It Can Do
 
-- Run entirely on the frontend, with no application backend.
+- Run entirely on the frontend for static deployments such as Cloudflare Pages.
+- Use the built-in same-origin local API proxy in Docker deployments to avoid model-provider browser CORS limits.
 - Connect to an Android device with USB debugging enabled through WebADB in the browser.
 - Capture the phone screen and send the screenshot, current app, device state, and step history to the model.
 - Use the canonical JSON prompt/action format, while keeping parser compatibility for Open-AutoGLM-style action outputs.
 - Parse, normalize, and validate the next action returned by the model.
 - Execute app launches, taps, swipes, text input, Back, Home, long press, double tap, and wait actions through ADB.
 - Support continuous auto-execution as well as step-by-step human confirmation.
-- Support sensitive-action confirmation, max-step limits, stop controls, session reset, and run-log export.
+- Send chat messages to run automatically, with one-step planning kept in advanced debug controls.
+- Support sensitive-action confirmation, max-step limits, stop controls, and advanced reset/run-log export.
 - Persist page settings in the local browser `localStorage`.
 
 ## Good Fits
@@ -49,11 +52,10 @@ It is not a good fit for:
 1. Open the app in a Chromium-based browser.
 2. Connect an Android device with USB debugging enabled and authorize ADB on the phone.
 3. Fill in the OpenAI-compatible `Base URL`, `API Key`, and `Model`.
-4. Enter a natural-language task such as "Open Settings and go to Wi-Fi".
-5. Start a single step or auto-run session.
-6. The app captures the screen and asks the model for one action.
-7. The frontend parses and validates the action, then auto-executes or waits for confirmation depending on settings.
-8. The loop continues until the model returns `done`, requests `take_over`, the max step count is reached, or the user stops execution.
+4. Type a natural-language instruction in the chat, such as "Open Settings and go to Wi-Fi".
+5. Sending the message captures the screen and asks the model for one action.
+6. The frontend parses and validates the action, then executes safe actions automatically while sensitive actions still ask for confirmation.
+7. The loop continues until the model returns `done`, requests `take_over`, the max step count is reached, or the user stops execution.
 
 ## Requirements
 
@@ -62,7 +64,7 @@ It is not a good fit for:
 - A USB data cable.
 - An OpenAI-compatible `/v1/chat/completions` API.
 - A vision model that accepts `image_url` input.
-- An API service configured to allow browser cross-origin requests.
+- For static deployments, an API service configured to allow browser cross-origin requests. Docker deployments can avoid this requirement through the same-origin local proxy.
 - A `localhost` or HTTPS environment so WebUSB can work.
 
 ## Quick Start
@@ -90,15 +92,49 @@ The app stores these values in the current browser's `localStorage`:
 - `Base URL`: OpenAI-compatible API endpoint, default `https://api.openai.com/v1`.
 - `API Key`: model API key.
 - `Model`: model name, default `gpt-5.5`.
-- `Task`: current natural-language task.
 - `Max steps`: maximum auto-execution steps, default `50`.
-- `Auto execute`: whether safe model actions are executed automatically, default on.
 - `Confirm sensitive actions`: whether sensitive taps require human confirmation, default on.
 - `Stream responses`: whether to use streaming responses, default off.
 - `Use ADB Keyboard for text`: whether to prefer ADB Keyboard input, default off.
 - `Action settle`, `Double tap interval`, `Keyboard step`: timing controls for action execution and text input.
 
-The API key stays in the browser only. Use this on trusted devices and in local experimentation only.
+The API key stays in the browser only for static deployments. Docker deployments send model requests to the same-origin local proxy first, then the container's Node service forwards them to the configured model API so the browser does not need CORS access to the model provider.
+
+## Docker Deployment
+
+The Docker image builds the same frontend app and enables a small local Node service:
+
+- WebUSB/WebADB still runs in the browser.
+- The frontend posts model calls to same-origin `/api/openai/chat/completions`.
+- The Node service reads the request `Base URL`, `API Key`, and OpenAI-compatible payload, then forwards the request to the model API.
+- Cloudflare Pages does not use this Node service and does not set the proxy build variable, so the hosted static app still calls the configured model API directly from the browser.
+
+Build and run:
+
+```bash
+npm run docker:build
+docker run --rm -p 8080:8080 webdroid-agent
+```
+
+Then open this URL in Chrome or Edge:
+
+```text
+http://localhost:8080/
+```
+
+If you use the repository Docker Compose config:
+
+```bash
+docker compose up -d --build
+```
+
+Then open:
+
+```text
+http://localhost:8083/
+```
+
+You do not need to pass the API key as an environment variable. Continue entering it in the model settings panel. Do not expose this container proxy directly to an untrusted public network because it forwards arbitrary OpenAI-compatible `Base URL` values submitted by the browser.
 
 ## Action Protocol
 
@@ -207,14 +243,17 @@ src/
     screenshotPreprocess.ts   # screenshot preprocessing
     webAdbBackend.ts          # WebADB/WebUSB implementation
   components/
+    ChatPanel.tsx             # chat transcript and composer
     DevicePanel.tsx           # device connection and execution settings panel
     DeviceOptionsSection.tsx  # device input, confirmation, and timing options
     DirectCommandsSection.tsx # direct ADB action panel
     InstalledAppsSection.tsx  # installed-app search and launch controls
     ModelPanel.tsx            # model configuration panel
+    PendingActionCard.tsx     # pending action confirmation card
     PhoneStage.tsx            # phone screenshot and action overlay
     RunLog.tsx                # run log view
-    RunPanel.tsx              # chat, run controls, and pending action view
+    RunPanel.tsx              # chat, advanced debug controls, and pending action view
+    RunControls.tsx           # advanced debug and stop controls
     ScreenshotLightbox.tsx    # screenshot preview modal
     SettingsDialog.tsx        # app settings and repository information
   hooks/
@@ -229,11 +268,13 @@ src/
     actionTypes.ts            # action types and validation error definitions
     actions.ts                # action parsing, normalization, and validation
     agent.ts                  # agent loop orchestration
+    agentThread.ts            # persistent agent thread/turn/event model
     appCards.ts               # model context cards for common apps
     appCopy.ts                # localized copy aggregation and locale resolution
     appCopy.en-US.ts          # English UI copy
     appCopy.zh-CN.ts          # Chinese UI copy
     busyTask.ts               # in-page busy task identifiers
+    contextBuilder.ts         # model context building and compaction
     deviceDoctor.ts           # device and model configuration diagnostics
     deviceState.ts            # device state display formatting
     openAiClient.ts           # OpenAI-compatible network client
@@ -244,9 +285,10 @@ src/
     prompts.ts                # prompts and action rules
     repository.ts             # repository links and GitHub stats parsing
     runLogEntries.ts          # run-log entry and screenshot-view formatting
+    openAiRuntimeConfig.ts    # OpenAI request runtime configuration
     screenshotCoordinates.ts  # screenshot coordinate mapping
     settings.ts               # local settings persistence
-    taskTemplates.ts          # example task templates
+    threadStore.ts            # agent thread persistent storage
     toolRegistry.ts           # agent action tool registration and execution
   styles/                     # styles split by page area
     compact-section.css       # collapsible tool-section styles
@@ -257,12 +299,15 @@ src/
     phone-stage.css           # phone preview and action-overlay styles
     responsive.css            # responsive layout adjustments
     run-log.css               # run-log styles
-    run-panel.css             # chat and run-control styles
+    run-panel.css             # chat and advanced-debug styles
     screenshot-lightbox.css   # screenshot preview modal styles
     settings-dialog.css       # settings dialog styles
     theme.css                 # theme tokens and base reset
   App.tsx                     # page state, workflow logic, and component composition
   main.tsx                    # React entrypoint and global style loading
+server/
+  index.js                    # static-file and API proxy server for Docker
+  openAiProxy.js              # local OpenAI-compatible proxy handler
 ```
 
 ## Verification
@@ -302,6 +347,8 @@ You can also verify the build locally first:
 ```bash
 npm run build
 ```
+
+Cloudflare Pages should keep using plain `npm run build` without `VITE_OPENAI_PROXY_URL`. That keeps the hosted static app on browser-direct model API requests and avoids depending on the Docker-only local Node proxy.
 
 ## License
 

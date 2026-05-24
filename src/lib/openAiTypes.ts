@@ -20,6 +20,17 @@ export type CompletionRequest = ModelConfig & {
   appCard?: string
   installedApps?: readonly InstalledApp[]
   promptContext?: string
+  signal?: AbortSignal
+}
+
+export type FinalResponseRequest = ModelConfig & {
+  task: string
+  conversation?: readonly AgentConversationMessage[]
+  history?: readonly AgentHistoryItem[]
+  currentApp?: string
+  deviceState?: DeviceState
+  progressSummary?: string
+  signal?: AbortSignal
 }
 
 export type RepairActionRequest = CompletionRequest & {
@@ -82,5 +93,6 @@ export type ChatCompletionPayload = {
 
 export type OpenAiClient = {
   completeAction(request: CompletionRequest): Promise<string>
+  completeFinalResponse?(request: FinalResponseRequest): Promise<string>
   repairAction?(request: RepairActionRequest): Promise<string>
 }

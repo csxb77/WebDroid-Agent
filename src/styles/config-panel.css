@@ -1,3 +1,98 @@
+.config-panel {
+  transition:
+    width 180ms ease,
+    padding 180ms ease;
+}
+
+.config-panel-expanded {
+  max-height: calc(100dvh - 152px);
+  overflow: auto;
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.config-panel-expanded::-webkit-scrollbar {
+  width: 6px;
+}
+
+.config-panel-expanded::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.config-panel-expanded::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+
+.config-panel-collapsed {
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px;
+}
+
+.config-sidebar-header {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.config-sidebar-title {
+  color: var(--text);
+  flex: 1 1 auto;
+  font-size: 13px;
+  font-weight: 900;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-sidebar-toggle {
+  border-radius: 12px;
+  height: 38px;
+  min-height: 38px;
+  width: 38px;
+}
+
+.config-panel-content,
+.config-panel-group {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.config-panel-group,
+.compact-section {
+  scroll-margin: 14px;
+}
+
+.config-rail {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.config-rail-button {
+  aspect-ratio: 1;
+  background: transparent;
+  border-color: transparent;
+  border-radius: 12px;
+  color: var(--text-secondary);
+  min-height: 42px;
+  padding: 0;
+  width: 42px;
+}
+
+.config-rail-button:hover:not(:disabled),
+.config-rail-button:focus-visible {
+  background: var(--button-bg-hover);
+  border-color: var(--border);
+  color: var(--accent);
+}
+
 .device-box,
 .model-box {
   background: var(--subtle-bg);

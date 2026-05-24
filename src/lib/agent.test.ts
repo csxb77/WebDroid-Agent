@@ -3,6 +3,7 @@ import type { DeviceBackend } from '../adapters/deviceTypes'
 import {
   createAgentRunner,
   createAgentSession,
+  nextAgentStepIndex,
   queueUserMessage,
   recordAgentStep,
   runAgentStep,
@@ -72,8 +73,8 @@ describe('runAgentStep', () => {
       device,
       client,
       modelConfig: { baseUrl: 'https://api.example.com/v1', apiKey: 'key', model: 'm' },
-        task: 'Open app',
-      })
+      task: 'Open app',
+    })
 
     expect(step.action).toEqual({ action: 'tap', x: 100, y: 200, reason: 'open' })
     expect(step.preview).toBe('tap (100, 200) - open')
@@ -343,8 +344,65 @@ describe('createAgentRunner', () => {
     expect(device.executed).toEqual([])
   })
 
+  it('stops before the next step when the run signal is aborted', async () => {
+    const device = fakeDevice()
+    const controller = new AbortController()
+    controller.abort()
+    const client: OpenAiClient = {
+      completeAction: vi.fn(async () => '{"action":"tap","x":100,"y":200}'),
+    }
+    const runner = createAgentRunner({ device, client })
+
+    const result = await runner.run({
+      modelConfig: { baseUrl: 'https://api.example.com/v1', apiKey: 'key', model: 'm' },
+      task: 'Open app',
+      autoExecute: true,
+      maxSteps: 5,
+      signal: controller.signal,
+    })
+
+    expect(result.status).toBe('stopped')
+    expect(client.completeAction).not.toHaveBeenCalled()
+    expect(device.executed).toEqual([])
+  })
+
   it('stops when the model returns done', async () => {
     const device = fakeDevice()
+    const session = createAgentSession('Open app')
+    const client: OpenAiClient = {
+      completeAction: vi.fn(async () => '{"action":"done","summary":"finished"}'),
+      completeFinalResponse: vi.fn(async () => 'All set, the app is open.'),
+    }
+    const runner = createAgentRunner({ device, client })
+
+    const result = await runner.run({
+      modelConfig: { baseUrl: 'https://api.example.com/v1', apiKey: 'key', model: 'm' },
+      task: 'Open app',
+      autoExecute: true,
+      maxSteps: 5,
+      session,
+    })
+
+    expect(result.status).toBe('done')
+    expect(result.finalResponse).toBe('All set, the app is open.')
+    expect(client.completeFinalResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        task: 'Open app',
+        progressSummary: 'finished',
+        conversation: expect.arrayContaining([
+          expect.objectContaining({ role: 'assistant', content: 'finished' }),
+        ]),
+      }),
+    )
+    expect(session.messages.at(-1)).toEqual(
+      expect.objectContaining({ role: 'assistant', content: 'All set, the app is open.' }),
+    )
+    expect(device.executed).toEqual([])
+  })
+
+  it('falls back to the done summary when final response generation is unavailable', async () => {
+    const device = fakeDevice()
+    const session = createAgentSession('Open app')
     const client: OpenAiClient = {
       completeAction: vi.fn(async () => '{"action":"done","summary":"finished"}'),
     }
@@ -355,10 +413,15 @@ describe('createAgentRunner', () => {
       task: 'Open app',
       autoExecute: true,
       maxSteps: 5,
+      session,
     })
 
     expect(result.status).toBe('done')
-    expect(device.executed).toEqual([])
+    expect(result.finalResponse).toBe('finished')
+    expect(session.messages.filter((message) => message.role === 'assistant')).toHaveLength(1)
+    expect(session.messages.at(-1)).toEqual(
+      expect.objectContaining({ role: 'assistant', content: 'finished' }),
+    )
   })
 
   it('stops for manual takeover even when auto-execute is enabled', async () => {
@@ -376,6 +439,47 @@ describe('createAgentRunner', () => {
     })
 
     expect(result.status).toBe('awaiting_takeover')
+    expect(device.executed).toEqual([])
+  })
+
+  it('stops instead of executing legacy interact actions', async () => {
+    const device = fakeDevice()
+    const client: OpenAiClient = {
+      completeAction: vi.fn(async () => '{"action":"Interact","message":"choose an account"}'),
+    }
+    const runner = createAgentRunner({ device, client })
+
+    const result = await runner.run({
+      modelConfig: { baseUrl: 'https://api.example.com/v1', apiKey: 'key', model: 'm' },
+      task: 'Open app',
+      autoExecute: true,
+      maxSteps: 5,
+    })
+
+    expect(result.status).toBe('awaiting_takeover')
+    expect(result.steps[0].action).toEqual({
+      action: 'take_over',
+      message: 'choose an account',
+    })
+    expect(device.executed).toEqual([])
+  })
+
+  it('routes local safety takeover decisions through the agent run status', async () => {
+    const device = fakeDevice()
+    const client: OpenAiClient = {
+      completeAction: vi.fn(async () => '{"action":"input_text","text":"123456"}'),
+    }
+    const runner = createAgentRunner({ device, client })
+
+    const result = await runner.run({
+      modelConfig: { baseUrl: 'https://api.example.com/v1', apiKey: 'key', model: 'm' },
+      task: 'Enter the verification code',
+      autoExecute: true,
+      maxSteps: 5,
+    })
+
+    expect(result.status).toBe('awaiting_takeover')
+    expect(result.reason).toContain('manual takeover')
     expect(device.executed).toEqual([])
   })
 
@@ -542,6 +646,37 @@ describe('createAgentRunner', () => {
     expect(session.lastExecutionResult).toBe('Sensitive action blocked')
   })
 
+  it('continues step numbering from restored session state', async () => {
+    const device = fakeDevice()
+    const session = createAgentSession('Continue task')
+    session.stepNumber = 3
+    session.history.push({
+      step: 4,
+      currentApp: 'Chrome',
+      actionPreview: 'tap (10, 20)',
+      executionResult: 'input tap 10 20',
+    })
+    const client: OpenAiClient = {
+      completeAction: vi.fn(async () => '{"action":"wait","ms":100}'),
+    }
+    const runner = createAgentRunner({ device, client })
+
+    expect(nextAgentStepIndex(session)).toBe(5)
+
+    const result = await runner.run({
+      modelConfig: { baseUrl: 'https://api.example.com/v1', apiKey: 'key', model: 'm' },
+      task: 'Continue task',
+      autoExecute: true,
+      maxSteps: 2,
+      session,
+    })
+
+    expect(result.status).toBe('max_steps')
+    expect(result.steps.map((step) => step.index)).toEqual([5, 6])
+    expect(session.history.map((item) => item.step)).toEqual([4, 5, 6])
+    expect(session.stepNumber).toBe(6)
+  })
+
   it('keeps running when a new user message is queued while the model finishes', async () => {
     const device = fakeDevice()
     const session = createAgentSession('Open Settings')
@@ -572,6 +707,7 @@ describe('createAgentRunner', () => {
         conversation: expect.arrayContaining([
           expect.objectContaining({ role: 'user', content: 'Now open Bluetooth' }),
         ]),
+        promptContext: expect.stringContaining('<pending_user_messages>\n- Now open Bluetooth'),
       }),
     )
   })

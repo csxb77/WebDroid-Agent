@@ -15,10 +15,7 @@ function memoryStorage(): SettingsStorage {
 describe('usePersistedSettings', () => {
   it('saves the current settings and resaves when they change', () => {
     const storage = memoryStorage()
-    const initialSettings: AppSettings = {
-      ...DEFAULT_SETTINGS,
-      task: 'Open Settings',
-    }
+    const initialSettings: AppSettings = DEFAULT_SETTINGS
     const { rerender } = renderHook(
       ({ settings }) => usePersistedSettings(settings, storage),
       {

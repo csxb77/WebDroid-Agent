@@ -5,9 +5,7 @@ export type LanguageMode = 'system' | 'zh-CN' | 'en-US'
 
 export type AppSettings = {
   modelConfig: ModelConfig
-  task: string
   maxSteps: number
-  autoExecute: boolean
   preferAdbKeyboard: boolean
   confirmSensitiveActions: boolean
   streamResponses: boolean
@@ -33,9 +31,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     apiKey: '',
     model: 'gpt-5.5',
   },
-  task: 'Open Settings and show the Wi-Fi page.',
   maxSteps: 50,
-  autoExecute: true,
   preferAdbKeyboard: false,
   confirmSensitiveActions: true,
   streamResponses: false,
@@ -90,9 +86,7 @@ function normalizeSettings(candidate: unknown): AppSettings {
       apiKey: readString(modelConfig.apiKey, DEFAULT_SETTINGS.modelConfig.apiKey),
       model: readString(modelConfig.model, DEFAULT_SETTINGS.modelConfig.model),
     },
-    task: readString(candidate.task, DEFAULT_SETTINGS.task),
     maxSteps: clamp(readNumber(candidate.maxSteps, DEFAULT_SETTINGS.maxSteps), 1, 200),
-    autoExecute: readBoolean(candidate.autoExecute, DEFAULT_SETTINGS.autoExecute),
     preferAdbKeyboard: readBoolean(candidate.preferAdbKeyboard, DEFAULT_SETTINGS.preferAdbKeyboard),
     confirmSensitiveActions: readBoolean(
       candidate.confirmSensitiveActions,

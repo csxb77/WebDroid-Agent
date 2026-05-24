@@ -20,6 +20,7 @@ import { buildAgentPromptContext, compactThreadContext } from './contextBuilder'
 import {
   createAgentThread,
   createConversationMessage,
+  recordThreadFinalResponse,
   recordThreadTurnExecution,
   recordThreadUserMessage,
   startThreadTurn,
@@ -70,6 +71,7 @@ export type RunAgentStepInput = {
   session?: AgentSession
   index?: number
   onSnapshot?: (snapshot: AgentDeviceSnapshot) => void | Promise<void>
+  signal?: AbortSignal
 }
 
 export type AgentRunStatus =
@@ -84,6 +86,7 @@ export type AgentRunResult = {
   status: AgentRunStatus
   steps: AgentStep[]
   reason?: string
+  finalResponse?: string
 }
 
 export type AgentRunnerInput = {
@@ -96,6 +99,7 @@ export type AgentRunnerInput = {
   onSnapshot?: (snapshot: AgentDeviceSnapshot) => void | Promise<void>
   onStep?: (step: AgentStep) => void
   onExecuted?: (step: AgentStep, result: string) => void | Promise<void>
+  onFinalResponse?: (response: string) => void | Promise<void>
   confirmSensitiveAction?: ExecuteActionOptions['confirmSensitiveAction']
 }
 
@@ -126,6 +130,12 @@ export function queueUserMessage(session: AgentSession, message: string): Queued
   return queued
 }
 
+export function nextAgentStepIndex(session: AgentSession) {
+  const latestHistoryStep = Math.max(0, ...session.history.map((item) => item.step))
+  const latestTurnStep = Math.max(0, ...session.turns.map((turn) => turn.index))
+  return Math.max(session.stepNumber, latestHistoryStep, latestTurnStep) + 1
+}
+
 export function recordAgentStep(
   session: AgentSession,
   step: AgentStep,
@@ -133,6 +143,7 @@ export function recordAgentStep(
   success = executionResult === undefined ? undefined : true,
 ) {
   step.executionResult = executionResult
+  session.stepNumber = Math.max(session.stepNumber, step.index)
   updateSessionDeviceSnapshot(session, {
     currentApp: step.currentApp,
     deviceState: step.deviceState,
@@ -173,6 +184,44 @@ export function recordAgentStep(
   compactThreadContext(session)
 }
 
+export async function recordAgentFinalResponse({
+  client,
+  modelConfig,
+  session,
+  task,
+}: {
+  client: OpenAiClient
+  modelConfig: ModelConfig
+  session: AgentSession
+  task: string
+}) {
+  const fallback = session.progressSummary.trim() || 'Task completed.'
+  let finalResponse = fallback
+
+  if (client.completeFinalResponse) {
+    try {
+      finalResponse =
+        (
+          await client.completeFinalResponse({
+            ...modelConfig,
+            task,
+            conversation: session.messages.map((message) => ({ ...message })),
+            history: session.history.map((item) => ({ ...item })),
+            currentApp: session.currentApp,
+            deviceState: session.deviceState,
+            progressSummary: session.progressSummary,
+          })
+        ).trim() || fallback
+    } catch {
+      finalResponse = fallback
+    }
+  }
+
+  const message = recordThreadFinalResponse(session, finalResponse)
+  compactThreadContext(session)
+  return message.content
+}
+
 export async function runAgentStep({
   device,
   client,
@@ -181,7 +230,11 @@ export async function runAgentStep({
   session,
   index = 1,
   onSnapshot,
+  signal,
 }: RunAgentStepInput): Promise<AgentStep> {
+  if (signal?.aborted) {
+    throw new DOMException('Run stopped.', 'AbortError')
+  }
   const startedAt = now()
   const captureStartedAt = now()
   const screenshot = await device.screenshot()
@@ -198,16 +251,20 @@ export async function runAgentStep({
     deviceState,
   })
   const installedApps = await getInstalledAppsOrEmpty(device)
+  if (signal?.aborted) {
+    throw new DOMException('Run stopped.', 'AbortError')
+  }
   const modelStartedAt = now()
   if (session) {
-    session.stepNumber = index
+    session.stepNumber = Math.max(session.stepNumber, index)
     updateSessionDeviceSnapshot(session, { currentApp, deviceState, screenshot })
-    drainPendingUserMessages(session)
   }
+  const pendingUserMessages = session ? [...session.pendingUserMessages] : []
   const builtContext = buildAgentPromptContext({
     thread: session,
     task,
     latestUserMessage: session ? latestUserMessage(session.messages) : undefined,
+    pendingUserMessages: pendingUserMessages.map((message) => message.message),
     screen: modelScreenshot.screen,
     deviceScreen: screenshot.screen,
     currentApp,
@@ -229,6 +286,7 @@ export async function runAgentStep({
     appCard: resolveAppCard(deviceState.packageName),
     installedApps,
     promptContext,
+    signal,
   }
   let modelOutput = await client.completeAction(completionRequest)
   let modelMs = elapsed(modelStartedAt)
@@ -277,6 +335,9 @@ export async function runAgentStep({
         timing,
       })
     : undefined
+  if (session) {
+    markPendingUserMessagesConsumed(session, pendingUserMessages)
+  }
 
   return {
     index,
@@ -310,21 +371,35 @@ export function createAgentRunner({
     async run(input: AgentRunnerInput): Promise<AgentRunResult> {
       const steps: AgentStep[] = []
       const session = input.session ?? createAgentSession(input.task)
+      const startIndex = nextAgentStepIndex(session)
 
-      for (let index = 1; index <= input.maxSteps; index += 1) {
+      for (let offset = 0; offset < input.maxSteps; offset += 1) {
+        const index = startIndex + offset
         if (input.signal?.aborted) {
           return { status: 'stopped', steps }
         }
 
-        const step = await runAgentStep({
-          device,
-          client,
-          modelConfig: input.modelConfig,
-          task: input.task,
-          session,
-          index,
-          onSnapshot: input.onSnapshot,
-        })
+        let step: AgentStep
+        try {
+          step = await runAgentStep({
+            device,
+            client,
+            modelConfig: input.modelConfig,
+            task: input.task,
+            session,
+            index,
+            onSnapshot: input.onSnapshot,
+            signal: input.signal,
+          })
+        } catch (caught) {
+          if (input.signal?.aborted || isAbortError(caught)) {
+            return { status: 'stopped', steps }
+          }
+          throw caught
+        }
+        if (input.signal?.aborted) {
+          return { status: 'stopped', steps }
+        }
         steps.push(step)
         input.onStep?.(step)
 
@@ -333,7 +408,14 @@ export function createAgentRunner({
           if (session.pendingUserMessages.length > 0) {
             continue
           }
-          return { status: 'done', steps }
+          const finalResponse = await recordAgentFinalResponse({
+            client,
+            modelConfig: input.modelConfig,
+            session,
+            task: input.task,
+          })
+          await input.onFinalResponse?.(finalResponse)
+          return { status: 'done', steps, finalResponse }
         }
 
         if (step.action.action === 'take_over') {
@@ -351,13 +433,29 @@ export function createAgentRunner({
           return { status: 'awaiting_review', steps }
         }
 
+        if (input.signal?.aborted) {
+          return { status: 'stopped', steps }
+        }
+
         const result = await toolRegistry.execute(step.executionAction, {
           device,
           confirmSensitiveAction: input.confirmSensitiveAction,
+          safetyContext: {
+            task: input.task,
+            currentApp: step.currentApp,
+            deviceState: step.deviceState,
+            modelOutput: step.modelOutput,
+          },
         })
+        if (input.signal?.aborted) {
+          return { status: 'stopped', steps }
+        }
         recordAgentStep(session, step, result.summary, result.success)
         await input.onExecuted?.(step, result.summary)
         if (!result.success) {
+          if (result.safetyDecision === 'take_over') {
+            return { status: 'awaiting_takeover', steps, reason: result.summary }
+          }
           return { status: 'awaiting_review', steps, reason: result.summary }
         }
       }
@@ -367,13 +465,25 @@ export function createAgentRunner({
   }
 }
 
-function drainPendingUserMessages(session: AgentSession) {
-  if (session.pendingUserMessages.length === 0) {
-    return []
+function markPendingUserMessagesConsumed(
+  session: AgentSession,
+  consumedMessages: readonly QueuedUserMessage[],
+) {
+  if (consumedMessages.length === 0) {
+    return
   }
-  const messages = [...session.pendingUserMessages]
-  session.pendingUserMessages = []
-  return messages
+
+  const consumedIds = new Set(consumedMessages.map((message) => message.id))
+  session.pendingUserMessages = session.pendingUserMessages.filter(
+    (message) => !consumedIds.has(message.id),
+  )
+}
+
+function isAbortError(caught: unknown) {
+  return (
+    (caught instanceof DOMException && caught.name === 'AbortError') ||
+    (caught instanceof Error && caught.name === 'AbortError')
+  )
 }
 
 function updateSessionDeviceSnapshot(

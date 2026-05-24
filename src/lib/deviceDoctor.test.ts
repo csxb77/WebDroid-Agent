@@ -48,7 +48,7 @@ describe('runDeviceDoctor', () => {
       getInputMethods: vi.fn(async () => 'com.android.adbkeyboard/.AdbIME'),
       execute: vi.fn(),
     } satisfies DeviceBackend
-    const fetcher = vi.fn(async () => ({ ok: true, status: 200 })) as unknown as typeof fetch
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 200 }))
 
     const results = byId(
       await runDeviceDoctor({

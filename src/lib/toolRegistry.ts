@@ -1,4 +1,9 @@
 import type { DeviceBackend, ExecuteActionOptions } from '../adapters/deviceTypes'
+import {
+  evaluateActionSafety,
+  type ActionSafetyContext,
+  type ActionSafetyDecision,
+} from './actionSafetyPolicy'
 import type { AgentAction } from './actionTypes'
 
 export type ActionToolParameter = {
@@ -17,11 +22,13 @@ export type ActionToolResult = {
   toolName: string
   success: boolean
   summary: string
+  safetyDecision?: Exclude<ActionSafetyDecision, 'allow'>
 }
 
 export type ActionToolContext = {
   device: DeviceBackend
   confirmSensitiveAction?: ExecuteActionOptions['confirmSensitiveAction']
+  safetyContext?: ActionSafetyContext
 }
 
 type ActionToolName = AgentAction['action']
@@ -30,7 +37,7 @@ type ActionToolEntry<Action extends AgentAction = AgentAction> = ActionToolSigna
   execute: (action: Action, context: ActionToolContext) => Promise<string> | string
 }
 
-const DEFAULT_ACTION_TOOL_SIGNATURES: Record<ActionToolName, ActionToolSignature> = {
+const DEFAULT_ACTION_TOOL_SIGNATURES: Partial<Record<ActionToolName, ActionToolSignature>> = {
   launch: {
     description: 'Launch an Android app by common app name or package name.',
     parameters: {
@@ -58,9 +65,15 @@ const DEFAULT_ACTION_TOOL_SIGNATURES: Record<ActionToolName, ActionToolSignature
     },
   },
   input_text: {
-    description: 'Type text into the focused field.',
+    description: 'Type text into the focused field, optionally clearing the field first.',
     parameters: {
       text: { type: 'string', required: true, description: 'Text to input.' },
+      clear: {
+        type: 'boolean',
+        required: false,
+        default: false,
+        description: 'Clear the currently focused field before typing.',
+      },
     },
   },
   key: {
@@ -110,18 +123,6 @@ const DEFAULT_ACTION_TOOL_SIGNATURES: Record<ActionToolName, ActionToolSignature
       message: { type: 'string', required: true },
     },
   },
-  interact: {
-    description: 'Ask the user for interaction or a choice.',
-    parameters: {
-      message: { type: 'string', required: true },
-    },
-  },
-  call_api: {
-    description: 'Request analysis or summarization from the agent context.',
-    parameters: {
-      instruction: { type: 'string', required: true },
-    },
-  },
   done: {
     description: 'Mark the task as complete.',
     parameters: {
@@ -168,6 +169,23 @@ export class ActionToolRegistry {
 
   async execute(action: AgentAction, context: ActionToolContext): Promise<ActionToolResult> {
     const toolName = action.action
+    if (action.action === 'interact') {
+      return {
+        toolName,
+        success: false,
+        summary: action.message,
+        safetyDecision: 'take_over',
+      }
+    }
+    if (action.action === 'call_api') {
+      return {
+        toolName,
+        success: false,
+        summary: `Unsupported call_api action: ${action.instruction}`,
+        safetyDecision: 'take_over',
+      }
+    }
+
     const entry = this.#tools.get(toolName)
     if (!entry) {
       return {
@@ -185,8 +203,38 @@ export class ActionToolRegistry {
       }
     }
 
+    const safety = evaluateActionSafety(action, context.safetyContext)
+    if (safety.decision === 'block' || safety.decision === 'take_over') {
+      return {
+        toolName,
+        success: false,
+        summary: safety.message ?? `Safety policy stopped ${toolName}.`,
+        safetyDecision: safety.decision,
+      }
+    }
+
+    let safetyConfirmed = false
+    if (safety.decision === 'confirm') {
+      const message = safety.message ?? `Safety policy requires confirmation before ${toolName}.`
+      const confirmed = context.confirmSensitiveAction
+        ? await context.confirmSensitiveAction(message, action)
+        : false
+      if (!confirmed) {
+        return {
+          toolName,
+          success: false,
+          summary: `Sensitive action blocked: ${message}`,
+          safetyDecision: 'confirm',
+        }
+      }
+      safetyConfirmed = true
+    }
+
     try {
-      const summary = await entry.execute(action, context)
+      const summary = await entry.execute(action, {
+        ...context,
+        confirmSensitiveAction: safetyConfirmed ? () => true : context.confirmSensitiveAction,
+      })
       return {
         toolName,
         success: true,
