@@ -1,7 +1,7 @@
 .config-panel {
   transition:
-    width var(--duration-moderate) var(--ease-productive),
-    padding var(--duration-moderate) var(--ease-productive);
+    width var(--duration-moderate) var(--ease-spring),
+    padding var(--duration-moderate) var(--ease-spring);
 }
 
 .config-panel-expanded {
@@ -22,7 +22,7 @@
 }
 
 .config-panel-expanded::after {
-  background: linear-gradient(0deg, var(--panel-bg) 20%, transparent 100%);
+  background: linear-gradient(0deg, var(--chrome-bg) 20%, transparent 100%);
   bottom: 0;
   margin: -18px -16px 0;
   order: 3;
@@ -50,7 +50,7 @@
 .config-sidebar-header {
   align-items: center;
   background: var(--chrome-bg);
-  backdrop-filter: blur(16px) saturate(1.2);
+  backdrop-filter: blur(20px) saturate(1.4);
   border-bottom: 1px solid transparent;
   display: flex;
   gap: var(--space-4);
@@ -61,7 +61,7 @@
   padding: var(--space-4) var(--space-5) var(--space-4) var(--space-7);
   position: sticky;
   top: 0;
-  transition: border-color var(--duration-normal) ease;
+  transition: border-color var(--duration-normal) var(--ease-productive);
   z-index: 2;
 }
 
@@ -86,7 +86,7 @@
   border-radius: var(--radius-md);
   height: 38px;
   min-height: 38px;
-  transition: background var(--duration-normal) ease, transform var(--duration-normal) var(--ease-spring);
+  transition: background var(--duration-normal) var(--ease-productive), transform var(--duration-normal) var(--ease-spring);
   width: 38px;
 }
 
@@ -141,9 +141,9 @@
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
-  padding: 3px 7px;
+  padding: 3px 8px;
   text-overflow: ellipsis;
-  transition: background var(--duration-normal) ease, border-color var(--duration-normal) ease;
+  transition: background var(--duration-normal) var(--ease-productive), border-color var(--duration-normal) var(--ease-productive);
   white-space: nowrap;
   width: fit-content;
 }

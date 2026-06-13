@@ -15,18 +15,18 @@
   padding: 0;
   position: relative;
   transition:
-    background var(--duration-normal) ease,
-    border-color var(--duration-normal) ease,
-    color var(--duration-normal) ease,
-    box-shadow var(--duration-normal) ease,
+    background var(--duration-normal) var(--ease-productive),
+    border-color var(--duration-normal) var(--ease-productive),
+    color var(--duration-normal) var(--ease-productive),
+    box-shadow var(--duration-normal) var(--ease-productive),
     transform var(--duration-fast) var(--ease-spring);
   width: 40px;
 }
 
 .config-rail-button:hover:not(:disabled),
 .config-rail-button:focus-visible {
-  background: var(--button-bg-hover);
-  border-color: var(--border-strong);
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-border);
   box-shadow: var(--glow-accent);
   color: var(--accent);
   transform: scale(1.06);

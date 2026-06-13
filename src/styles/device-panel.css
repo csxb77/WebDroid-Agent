@@ -1,21 +1,22 @@
 .device-box {
   background: var(--surface-muted);
+  backdrop-filter: blur(16px) saturate(1.2);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   display: grid;
-  gap: 6px;
-  padding: 10px;
+  gap: var(--space-2);
+  padding: var(--space-3);
 }
 
 .device-box span {
   color: var(--text);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--text-md);
+  font-weight: var(--font-weight-semibold);
 }
 
 .device-details {
   display: grid;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .device-details summary {
@@ -23,9 +24,9 @@
   color: var(--text-muted);
   cursor: pointer;
   display: inline-flex;
-  font-size: 12px;
-  font-weight: 600;
-  gap: 6px;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  gap: var(--space-2);
   list-style: none;
   width: fit-content;
 }
@@ -40,7 +41,7 @@
   border-top: 4px solid transparent;
   content: "";
   height: 0;
-  transition: transform 120ms ease;
+  transition: transform var(--duration-fast) var(--ease-productive);
   width: 0;
 }
 

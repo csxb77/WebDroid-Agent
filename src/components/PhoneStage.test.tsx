@@ -358,7 +358,7 @@ describe('PhoneStage', () => {
 
   it('sizes the normal phone preview to use most of the preview area', () => {
     expect(phoneStageCss).toMatch(/\.phone-stage\s*\{[\s\S]*padding:\s*var\(--space-6\)/)
-    expect(phoneStageCss).toMatch(/\.phone-frame\s*\{[\s\S]*border:\s*8px solid/)
+    expect(phoneStageCss).toMatch(/\.phone-frame\s*\{[\s\S]*border:\s*6px solid/)
     expect(phoneStageCss).toMatch(/\.phone-frame\s*\{[\s\S]*max-height:\s*min\(82vh,\s*820px\)/)
     expect(phoneStageCss).toMatch(/\.phone-frame\s*\{[\s\S]*width:\s*min\(100%,\s*390px\)/)
     expect(responsiveCss).toMatch(/\.phone-frame\s*\{[\s\S]*max-height:\s*80vh/)

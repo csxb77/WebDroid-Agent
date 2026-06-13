@@ -235,7 +235,7 @@ describe('ConversationPanel', () => {
       /\.chat-input-frame\s*\{[\s\S]*flex-direction:\s*column/,
     )
     expect(chatComposerCss).toMatch(
-      /\.chat-input-frame:focus-within\s*\{[\s\S]*border-color:\s*var\(--accent\)/,
+      /\.chat-input-frame:focus-within\s*\{[\s\S]*border-color:\s*var\(--accent-soft-border\)/,
     )
     expect(chatComposerCss).toMatch(/\.chat-input\s*\{[\s\S]*min-height:\s*24px/)
     expect(chatComposerCss).toMatch(/\.chat-input\s*\{[\s\S]*border-radius:\s*0/)
@@ -243,7 +243,7 @@ describe('ConversationPanel', () => {
       /\.chat-input:focus,\s*[\r\n]+\.chat-input:focus-visible\s*\{[\s\S]*box-shadow:\s*none/,
     )
     expect(chatComposerCss).toMatch(/\.chat-send\s*\{[\s\S]*height:\s*38px/)
-    expect(chatComposerCss).not.toContain('backdrop-filter')
+    expect(chatComposerCss).toContain('backdrop-filter')
   })
 
   it('renders chat messages as sanitized markdown', async () => {

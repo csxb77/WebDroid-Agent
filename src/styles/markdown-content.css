@@ -56,7 +56,7 @@
   border-left: 3px solid;
   border-image: var(--gradient-brand) 1;
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-sm);
   color: var(--text-secondary);
   margin: 0.7em 0;
   padding: 0.5em 0.7em;
@@ -68,7 +68,7 @@
   text-decoration: underline;
   text-decoration-color: transparent;
   text-underline-offset: 2px;
-  transition: color var(--duration-fast) ease, text-decoration-color var(--duration-fast) ease;
+  transition: color var(--duration-fast) var(--ease-productive), text-decoration-color var(--duration-fast) var(--ease-productive);
 }
 
 .markdown-content a:hover {
@@ -88,7 +88,7 @@
   background: var(--phone-screen);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-md);
   color: var(--modal-text);
   font: var(--text-sm)/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   margin: 0.7em 0;
@@ -111,6 +111,7 @@
 
 .markdown-content table {
   border-collapse: separate;
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   border-spacing: 0;
   display: block;
@@ -138,7 +139,7 @@
 }
 
 .markdown-content tr:hover td {
-  background: color-mix(in srgb, var(--accent-soft) 30%, transparent);
+  background: var(--accent-soft);
 }
 
 .markdown-content hr {

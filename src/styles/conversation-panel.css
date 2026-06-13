@@ -5,6 +5,7 @@
 
 .conversation-panel {
   background: var(--panel-bg);
+  backdrop-filter: blur(20px) saturate(1.15);
   min-height: 0;
   min-width: 0;
   overflow: hidden;
@@ -26,8 +27,9 @@
   min-height: 32px;
   padding: 0 var(--space-4);
   transition:
-    background var(--duration-normal) ease,
-    border-color var(--duration-normal) ease,
+    background var(--duration-normal) var(--ease-productive),
+    border-color var(--duration-normal) var(--ease-productive),
+    box-shadow var(--duration-normal) var(--ease-productive),
     transform var(--duration-fast) var(--ease-spring);
 }
 
@@ -37,10 +39,11 @@
 
 .pending-action {
   animation: pending-action-enter 350ms var(--ease-out-expo) both;
-  background: var(--panel-bg);
+  background: var(--panel-bg-elevated);
+  backdrop-filter: blur(16px) saturate(1.1);
   border: 1px solid var(--accent-soft-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
   display: grid;
   gap: var(--space-4);
   margin: 0 var(--space-5) var(--space-5);
@@ -175,5 +178,5 @@
 }
 
 .pending-action-button {
-  box-shadow: none;
+  box-shadow: var(--shadow-accent-sm);
 }

@@ -2,13 +2,15 @@
   align-items: center;
   background: var(--surface-muted);
   background-image:
-    radial-gradient(ellipse at 30% 20%, rgba(59, 130, 246, 0.06), transparent 60%),
-    radial-gradient(ellipse at 70% 80%, rgba(16, 185, 129, 0.04), transparent 50%),
+    radial-gradient(ellipse 60% 50% at 30% 20%, rgba(99, 102, 241, 0.10), transparent 60%),
+    radial-gradient(ellipse 50% 40% at 70% 80%, rgba(168, 85, 247, 0.07), transparent 50%),
+    radial-gradient(ellipse 40% 35% at 50% 50%, rgba(6, 182, 212, 0.05), transparent 55%),
     radial-gradient(circle, var(--grid-line) 1px, transparent 1px);
-  background-size: 100% 100%, 100% 100%, 24px 24px;
+  background-size: 100% 100%, 100% 100%, 100% 100%, 24px 24px;
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(20px) saturate(1.1);
   display: flex;
   justify-content: center;
   min-height: 680px;
@@ -31,13 +33,13 @@
 .phone-frame {
   aspect-ratio: 9 / 20;
   background: var(--phone-screen);
-  border: 8px solid var(--phone-shell);
+  border: 6px solid var(--phone-shell);
   border-radius: var(--radius-2xl);
   box-shadow:
     0 32px 64px var(--shadow-strong),
-    0 0 0 1px rgba(255, 255, 255, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+    0 0 0 1px rgba(99, 102, 241, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
   max-height: min(82vh, 820px);
   max-width: 100%;
   overflow: hidden;
@@ -46,7 +48,7 @@
 }
 
 .phone-frame::after {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 30%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), transparent 30%);
   content: "";
   inset: 0;
   pointer-events: none;
@@ -55,7 +57,7 @@
 }
 
 .phone-frame::before {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.10);
   border-radius: var(--radius-full);
   content: "";
   height: 4px;
@@ -130,7 +132,7 @@
 
 .phone-screen-placeholder::before,
 .phone-screen-placeholder::after {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
   border-radius: var(--radius-full);
   content: "";
   left: 50%;
@@ -152,7 +154,7 @@
 
 .phone-empty-state {
   align-items: center;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.55);
   display: grid;
   gap: 6px;
   justify-items: center;
@@ -161,11 +163,11 @@
 }
 
 .phone-empty-state svg {
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .phone-empty-state strong {
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(255, 255, 255, 0.82);
   font-size: var(--text-md);
   line-height: 1.2;
 }
@@ -177,11 +179,11 @@
 
 .phone-zoom-controls {
   align-items: center;
-  background: rgba(15, 23, 42, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--overlay);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(16px) saturate(1.3);
   color: var(--modal-text);
   display: flex;
   gap: 4px;
@@ -193,8 +195,8 @@
   top: 10px;
   transform: translateY(-4px);
   transition:
-    opacity var(--duration-normal) ease,
-    transform var(--duration-normal) ease;
+    opacity var(--duration-normal) var(--ease-productive),
+    transform var(--duration-normal) var(--ease-spring);
   z-index: 12;
 }
 
@@ -212,8 +214,8 @@
 }
 
 .phone-zoom-controls button {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(129, 140, 248, 0.10);
+  border-color: var(--border-strong);
   border-radius: var(--radius-md);
   color: var(--modal-text);
   height: 28px;
@@ -254,7 +256,7 @@
 .swipe-marker {
   border: 2px solid var(--on-primary);
   border-radius: 50%;
-  box-shadow: 0 0 0 4px rgba(255, 193, 7, 0.4);
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.35), var(--shadow-accent-sm);
   height: 18px;
   position: absolute;
   transform: translate(-50%, -50%);
@@ -308,10 +310,11 @@
 }
 
 .swipe-duration-label {
-  background: rgba(15, 23, 42, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--overlay);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.26);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px) saturate(1.2);
   color: var(--modal-text);
   font: 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   padding: 4px 6px;
@@ -342,11 +345,11 @@
 
 .screenshot-command-draft {
   align-items: center;
-  background: rgba(15, 23, 42, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--overlay);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(16px) saturate(1.3);
   bottom: 10px;
   color: var(--modal-text);
   display: grid;
@@ -368,8 +371,8 @@
 }
 
 .screenshot-command-draft button {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(129, 140, 248, 0.12);
+  border-color: var(--border-strong);
   color: var(--modal-text);
   min-height: 28px;
   padding: 0 8px;

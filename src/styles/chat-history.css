@@ -1,5 +1,6 @@
 .chat-history-backdrop {
   background: var(--overlay);
+  backdrop-filter: blur(4px);
   border: 0;
   border-radius: 0;
   bottom: 0;
@@ -15,8 +16,8 @@
 
 .chat-history-sidebar {
   background: var(--panel-bg);
+  backdrop-filter: blur(24px) saturate(1.2);
   border-right: 1px solid var(--border);
-  backdrop-filter: blur(8px) saturate(1.05);
   bottom: 0;
   box-shadow: none;
   display: flex;
@@ -32,20 +33,20 @@
   transition:
     box-shadow 300ms var(--ease-out-expo),
     opacity 300ms var(--ease-out-expo),
-    transform 300ms var(--ease-out-expo);
+    transform 300ms var(--ease-spring);
   width: min(290px, calc(100% - 42px));
   z-index: 7;
 }
 
 .chat-history-sidebar.open {
-  box-shadow: 12px 0 40px var(--shadow-strong);
+  box-shadow: var(--shadow-elevated);
   pointer-events: auto;
   transform: translateX(0);
 }
 
 .chat-history-header {
   align-items: center;
-  background: var(--panel-bg);
+  background: transparent;
   border-bottom: 1px solid var(--border);
   display: flex;
   gap: var(--space-2);
@@ -92,25 +93,24 @@
   min-height: 34px;
   padding: 0;
   transition:
-    background var(--duration-normal) ease,
-    color var(--duration-normal) ease;
+    background var(--duration-normal) var(--ease-productive),
+    color var(--duration-normal) var(--ease-productive);
   width: 34px;
 }
 
 .chat-history-toggle:hover:not(:disabled),
 .chat-history-toggle:active:not(:disabled) {
-  background: var(--button-bg-hover);
+  background: var(--accent-soft);
   border-color: transparent;
   box-shadow: none;
-  color: var(--text);
+  color: var(--accent-soft-text);
   transform: none;
 }
 
 .chat-history-toggle:focus-visible {
   border-color: transparent;
-  box-shadow: none;
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  box-shadow: var(--glow-accent);
+  outline: none;
 }
 
 .chat-history-actions {
@@ -122,6 +122,7 @@
 .chat-history-action {
   align-items: center;
   background: var(--button-bg);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--text);
@@ -133,14 +134,19 @@
   min-height: 38px;
   padding: 0 var(--space-2-5);
   text-align: left;
-  transition: all var(--duration-normal) ease;
+  transition:
+    background var(--duration-normal) var(--ease-productive),
+    border-color var(--duration-normal) var(--ease-productive),
+    box-shadow var(--duration-normal) var(--ease-productive),
+    transform var(--duration-normal) var(--ease-spring);
   width: 100%;
 }
 
 .chat-history-action:hover:not(:disabled),
 .chat-history-action:focus-visible {
-  background: var(--button-bg-hover);
-  border-color: var(--border-strong);
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-border);
+  box-shadow: var(--shadow-accent-sm);
   transform: translateX(2px);
 }
 
@@ -158,6 +164,7 @@
 .chat-history-search {
   align-items: center;
   background: var(--field-bg);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   display: flex;
@@ -167,7 +174,7 @@
 }
 
 .chat-history-search:focus-within {
-  border-color: var(--accent);
+  border-color: var(--accent-soft-border);
   box-shadow: var(--glow-accent);
 }
 
@@ -201,8 +208,8 @@
 }
 
 .chat-history-search button:hover {
-  background: var(--button-bg-hover);
-  color: var(--text);
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
 }
 
 .chat-history-list {
@@ -235,19 +242,19 @@
   grid-template-columns: minmax(0, 1fr) 32px;
   min-height: 46px;
   transition:
-    background var(--duration-fast) ease,
-    box-shadow var(--duration-fast) ease,
-    color var(--duration-fast) ease;
+    background var(--duration-fast) var(--ease-productive),
+    box-shadow var(--duration-fast) var(--ease-productive),
+    color var(--duration-fast) var(--ease-productive);
 }
 
 .chat-history-item-row:hover {
   background: var(--surface-muted);
-  box-shadow: inset 2px 0 0 var(--border-strong);
+  box-shadow: inset 2px 0 0 var(--accent-soft-border);
 }
 
 .chat-history-item-row.active {
   background: var(--accent-soft);
-  box-shadow: inset 3px 0 0 var(--accent), var(--shadow);
+  box-shadow: inset 3px 0 0 var(--accent), var(--shadow-accent-sm);
 }
 
 .chat-history-item {
@@ -272,7 +279,7 @@
 .chat-history-status-dot {
   align-self: start;
   background: var(--text-soft);
-  border: 2px solid var(--panel-bg);
+  border: 2px solid var(--panel-bg-solid);
   border-radius: 50%;
   box-shadow: 0 0 0 1px var(--border);
   height: 9px;
@@ -284,18 +291,22 @@
 .chat-history-status-dot.status-awaiting_review,
 .chat-history-status-dot.status-awaiting_takeover {
   background: var(--accent);
+  box-shadow: 0 0 0 1px var(--border), 0 0 8px rgba(99, 102, 241, 0.4);
 }
 
 .chat-history-status-dot.status-done {
   background: var(--primary);
+  box-shadow: 0 0 0 1px var(--border), 0 0 8px rgba(16, 185, 129, 0.4);
 }
 
 .chat-history-status-dot.status-error {
   background: var(--danger);
+  box-shadow: 0 0 0 1px var(--border), 0 0 8px rgba(244, 63, 94, 0.4);
 }
 
 .chat-history-status-dot.status-stopped {
   background: var(--warn);
+  box-shadow: 0 0 0 1px var(--border), 0 0 8px rgba(245, 158, 11, 0.4);
 }
 
 .chat-history-item-text {
@@ -337,10 +348,10 @@
   opacity: 0.6;
   padding: 0;
   transition:
-    background var(--duration-fast) ease,
-    color var(--duration-fast) ease,
-    opacity var(--duration-fast) ease,
-    transform var(--duration-fast) ease;
+    background var(--duration-fast) var(--ease-productive),
+    color var(--duration-fast) var(--ease-productive),
+    opacity var(--duration-fast) var(--ease-productive),
+    transform var(--duration-fast) var(--ease-spring);
   width: 26px;
 }
 
@@ -358,6 +369,7 @@
 .chat-history-empty {
   align-items: center;
   background: var(--surface-muted);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--text-soft);
@@ -380,7 +392,7 @@
 
 .chat-history-empty-action {
   background: transparent;
-  border-color: var(--border);
+  border-color: var(--border-strong);
   border-radius: var(--radius-md);
   box-shadow: none;
   color: var(--text-secondary);
@@ -392,6 +404,7 @@
 
 .chat-history-empty-action:hover:not(:disabled),
 .chat-history-empty-action:focus-visible {
-  background: var(--button-bg-hover);
-  color: var(--text);
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-border);
+  color: var(--accent-soft-text);
 }

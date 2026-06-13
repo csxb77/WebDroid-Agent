@@ -1,5 +1,5 @@
 .log-drawer {
-  margin: 16px auto 0;
+  margin: var(--space-7) auto 0;
   max-width: 1480px;
 }
 
@@ -10,8 +10,8 @@
 
 .log-drawer > summary small {
   color: var(--text-soft);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
   overflow: hidden;
   text-align: right;
   text-overflow: ellipsis;
@@ -25,32 +25,33 @@
 .log-title span {
   align-items: center;
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .log-section {
   border: 0;
   box-shadow: none;
   margin: 0;
-  padding: 16px;
+  padding: var(--space-7);
 }
 
 .log-list {
   display: grid;
-  gap: 10px;
-  margin-top: 12px;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
 }
 
 .log-empty-state {
   align-items: center;
   background: var(--surface-muted);
+  backdrop-filter: blur(12px);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   color: var(--text-soft);
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   min-height: 46px;
-  padding: 0 12px;
+  padding: 0 var(--space-3);
 }
 
 .log-empty-state svg {
@@ -59,18 +60,19 @@
 }
 
 .log-empty-state p {
-  font-size: 13px;
+  font-size: var(--text-md);
   margin: 0;
 }
 
 .log-entry {
   background: var(--surface-muted);
+  backdrop-filter: blur(12px);
   border: 1px solid var(--border);
   border-left: 3px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   display: grid;
   gap: 5px;
-  padding: 10px 12px;
+  padding: var(--space-3) var(--space-4);
 }
 
 .log-entry.with-screenshot {
@@ -85,14 +87,14 @@
 
 .log-entry-body {
   align-items: start;
-  column-gap: 12px;
+  column-gap: var(--space-3);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .log-entry-text {
   display: grid;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -115,7 +117,7 @@
 
 .log-entry time {
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .log-entry strong {
@@ -123,58 +125,59 @@
 }
 
 .log-entry pre {
-  background: var(--panel-bg);
-  border-radius: 6px;
+  background: var(--field-bg-inset);
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
   margin: 2px 0 0;
   max-height: 160px;
   overflow: auto;
-  padding: 8px;
+  padding: var(--space-2);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .step-timeline {
   background: var(--surface-muted);
+  backdrop-filter: blur(12px);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   display: grid;
-  gap: 8px;
-  padding: 10px;
+  gap: var(--space-2);
+  padding: var(--space-3);
 }
 
 .step-timeline-header {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .step-timeline-header span {
   background: var(--status-ok-bg);
   border: 1px solid var(--status-ok-border);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   color: var(--status-ok-text);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 3px 8px;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  padding: 3px var(--space-2);
 }
 
 .step-timeline-header code {
   color: var(--text-soft);
-  font: 12px/1.3 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font: var(--text-sm)/1.3 var(--mono);
   overflow-wrap: anywhere;
 }
 
 .step-timeline-field {
   display: grid;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .step-timeline-field > span {
   color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
 }
 
 .step-timeline-field pre {
@@ -185,13 +188,20 @@
 .log-screenshot-button {
   background: var(--phone-screen);
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   cursor: zoom-in;
   height: 140px;
   overflow: hidden;
   padding: 0;
   position: relative;
+  transition: box-shadow var(--duration-normal) var(--ease-productive), transform var(--duration-fast) var(--ease-spring);
   width: 106px;
+}
+
+.log-screenshot-button:hover {
+  box-shadow: var(--shadow-md), var(--shadow-accent-sm);
+  transform: scale(1.04);
 }
 
 .log-screenshot-button img {
@@ -203,7 +213,8 @@
 
 .log-screenshot-overlay {
   align-items: center;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--overlay);
+  backdrop-filter: blur(4px);
   bottom: 0;
   color: var(--on-primary);
   display: flex;
@@ -213,7 +224,7 @@
   position: absolute;
   right: 0;
   top: 0;
-  transition: opacity 120ms ease-out;
+  transition: opacity var(--duration-fast) var(--ease-productive);
 }
 
 .log-screenshot-button:hover .log-screenshot-overlay,

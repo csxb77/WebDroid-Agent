@@ -1,5 +1,6 @@
 .chat-composer {
   background: linear-gradient(180deg, transparent, var(--panel-bg) 12px);
+  backdrop-filter: blur(16px) saturate(1.1);
   border-top: 1px solid var(--border);
   display: block;
   padding: var(--space-4) var(--space-4) calc(env(safe-area-inset-bottom, 0px) + var(--space-4));
@@ -10,6 +11,7 @@
 .chat-input-frame {
   align-items: stretch;
   background: var(--field-bg);
+  backdrop-filter: blur(12px) saturate(1.1);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
@@ -28,8 +30,8 @@
 }
 
 .chat-input-frame:focus-within {
-  background: var(--panel-bg);
-  border-color: var(--accent);
+  background: var(--panel-bg-elevated);
+  border-color: var(--accent-soft-border);
   box-shadow: var(--glow-accent);
 }
 
@@ -91,8 +93,9 @@
   place-items: center;
   position: static;
   transition:
-    background var(--duration-fast) ease,
-    border-color var(--duration-fast) ease,
+    background var(--duration-fast) var(--ease-productive),
+    border-color var(--duration-fast) var(--ease-productive),
+    box-shadow var(--duration-fast) var(--ease-productive),
     transform var(--duration-fast) var(--ease-spring);
   width: 38px;
 }
@@ -100,20 +103,20 @@
 .chat-send.button--primary {
   background: var(--gradient-accent);
   border-color: transparent;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-accent-sm);
   color: var(--on-primary);
 }
 
 .chat-send.button--primary:hover:not(:disabled) {
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent), var(--accent-hover)), var(--accent-hover));
   border-color: transparent;
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.3);
+  box-shadow: var(--shadow-accent);
   transform: scale(1.06);
 }
 
 .chat-send.button--primary:disabled {
   background: var(--surface-muted);
-  border-color: var(--surface-muted);
+  border-color: var(--surface-muted-border);
   box-shadow: none;
   color: var(--text-soft);
   opacity: 1;
@@ -125,29 +128,29 @@
 
 @keyframes stop-pulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
+    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.4);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(220, 38, 38, 0);
+    box-shadow: 0 0 0 6px rgba(244, 63, 94, 0);
   }
 }
 
 .chat-stop {
   animation: stop-pulse 1.8s ease infinite;
-  background: var(--danger);
-  border-color: var(--danger);
+  background: var(--gradient-danger);
+  border-color: transparent;
   color: var(--on-primary);
 }
 
 .chat-stop:hover:not(:disabled) {
-  background: var(--danger);
-  border-color: var(--danger);
+  background: var(--gradient-danger);
+  border-color: transparent;
   filter: brightness(0.92);
 }
 
 .chat-send:disabled {
   background: var(--surface-muted);
-  border-color: var(--surface-muted);
+  border-color: var(--surface-muted-border);
   color: var(--text-soft);
   opacity: 1;
 }

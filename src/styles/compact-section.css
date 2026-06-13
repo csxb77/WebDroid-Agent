@@ -8,9 +8,9 @@
   padding: 0;
   scroll-margin: var(--space-5);
   transition:
-    background var(--duration-fast) ease-out,
-    border-color var(--duration-fast) ease-out,
-    box-shadow var(--duration-moderate) ease-out;
+    background var(--duration-fast) var(--ease-productive),
+    border-color var(--duration-fast) var(--ease-productive),
+    box-shadow var(--duration-moderate) var(--ease-productive);
 }
 
 .compact-section > summary {
@@ -27,8 +27,8 @@
   outline: none;
   padding: var(--space-4) var(--space-5);
   transition:
-    background var(--duration-fast) ease-out,
-    color var(--duration-fast) ease-out;
+    background var(--duration-fast) var(--ease-productive),
+    color var(--duration-fast) var(--ease-productive);
 }
 
 .compact-section > summary::marker {
@@ -45,7 +45,7 @@
   content: "";
   height: 18px;
   opacity: 0.85;
-  transition: opacity var(--duration-normal) ease, height var(--duration-normal) ease;
+  transition: opacity var(--duration-normal) var(--ease-productive), height var(--duration-normal) var(--ease-spring);
   width: 4px;
 }
 
@@ -58,7 +58,7 @@
   justify-self: center;
   transform: rotate(-45deg);
   transition:
-    border-color var(--duration-fast) ease-out,
+    border-color var(--duration-fast) var(--ease-productive),
     transform var(--duration-moderate) var(--ease-spring);
   width: 7px;
 }

@@ -118,6 +118,7 @@ const chatPanelCss = readFileSync('src/styles/chat-panel.css', 'utf8')
 const configPanelCss = readFileSync('src/styles/config-panel.css', 'utf8')
 const configRailCss = readFileSync('src/styles/config-rail.css', 'utf8')
 const controlsCss = readFileSync('src/styles/controls.css', 'utf8')
+const primitivesCss = readFileSync('src/styles/primitives.css', 'utf8')
 const installedAppsCss = readFileSync('src/styles/installed-apps.css', 'utf8')
 const layoutCss = readFileSync('src/styles/layout.css', 'utf8')
 const responsiveCss = readFileSync('src/styles/responsive.css', 'utf8')
@@ -651,16 +652,16 @@ describe('App', () => {
   })
 
   it('keeps persistent shell controls aligned to the 8px corner system', () => {
-    expect(controlsCss).toMatch(
-      /input,\s*[\r\n]+select,\s*[\r\n]+textarea\s*\{[^}]*border-radius:\s*var\(--radius-md\)/,
+    expect(primitivesCss).toMatch(
+      /input,\s*[\r\n]+select,\s*[\r\n]+textarea\s*\{[^}]*border-radius:\s*var\(--radius-lg\)/,
     )
-    expect(controlsCss).toMatch(/[\r\n]button\s*\{[^}]*border-radius:\s*var\(--radius-md\)/)
-    expect(controlsCss).toMatch(/\.icon-button\s*\{[\s\S]*border-radius:\s*var\(--radius-md\)/)
+    expect(primitivesCss).toMatch(/[\r\n]button\s*\{[^}]*border-radius:\s*var\(--radius-lg\)/)
+    expect(controlsCss).toMatch(/\.icon-button\s*\{[\s\S]*border-radius:\s*var\(--radius-lg\)/)
     expect(configPanelCss).toMatch(
       /\.config-sidebar-toggle\s*\{[\s\S]*border-radius:\s*var\(--radius-md\)/,
     )
     expect(configRailCss).toMatch(/\.config-rail-button\s*\{[\s\S]*border-radius:\s*var\(--radius-md\)/)
-    expect(runLogCss).toMatch(/\.log-empty-state\s*\{[\s\S]*border-radius:\s*8px/)
+    expect(runLogCss).toMatch(/\.log-empty-state\s*\{[\s\S]*border-radius:\s*var\(--radius-lg\)/)
     expect(settingsDialogCss).toMatch(
       /\.settings-tool-search button\s*\{[\s\S]*border-radius:\s*var\(--radius-md\)/,
     )
@@ -736,12 +737,12 @@ describe('App', () => {
   })
 
   it('styles setting checkboxes as switch controls', () => {
-    expect(controlsCss).toContain('.toggle input[type="checkbox"]')
-    expect(controlsCss).toMatch(/appearance:\s*none/)
-    expect(controlsCss).toMatch(/border-radius:\s*var\(--radius-full\)/)
-    expect(controlsCss).toContain('input[type="checkbox"]::before')
-    expect(controlsCss).toContain('input[type="checkbox"]:checked')
-    expect(controlsCss).toMatch(/transform:\s*translateX\(20px\)/)
+    expect(primitivesCss).toContain('.toggle input[type="checkbox"]')
+    expect(primitivesCss).toMatch(/appearance:\s*none/)
+    expect(primitivesCss).toMatch(/border-radius:\s*var\(--radius-full\)/)
+    expect(primitivesCss).toContain('input[type="checkbox"]::before')
+    expect(primitivesCss).toContain('input[type="checkbox"]:checked')
+    expect(primitivesCss).toMatch(/transform:\s*translateX\(20px\)/)
   })
 
   it('keeps installed-app search and launch rows usable on narrow screens', () => {
@@ -1640,7 +1641,7 @@ describe('App', () => {
     const mobileBreakpoint = readMediaBlock(responsiveCss, 'max-width: 620px')
     const narrowBreakpoint = readMediaBlock(responsiveCss, 'max-width: 360px')
 
-    expect(chatPanelCss).toMatch(/\.chat-empty-icon\s*\{[\s\S]*border-radius:\s*var\(--radius-lg\)/)
+    expect(chatPanelCss).toMatch(/\.chat-empty-icon\s*\{[\s\S]*border-radius:\s*var\(--radius-2xl\)/)
     expect(mobileBreakpoint).toMatch(
       /\.chat-shell:has\(\.chat-empty-state\)\s*\{[\s\S]*min-height:\s*clamp\(320px,\s*42dvh,\s*420px\)/,
     )

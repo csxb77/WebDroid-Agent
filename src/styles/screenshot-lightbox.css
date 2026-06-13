@@ -1,13 +1,13 @@
 .screenshot-modal {
   align-items: center;
   animation: screenshot-modal-in 250ms var(--ease-out-expo);
-  background: rgba(15, 23, 42, 0.88);
-  backdrop-filter: blur(12px) saturate(1.1);
+  background: var(--overlay);
+  backdrop-filter: blur(16px) saturate(1.15);
   bottom: 0;
   display: flex;
   justify-content: center;
   left: 0;
-  padding: 24px;
+  padding: var(--space-7);
   position: fixed;
   right: 0;
   top: 0;
@@ -26,9 +26,9 @@
 .screenshot-modal-panel {
   animation: screenshot-panel-in 350ms var(--ease-out-expo);
   background: var(--phone-screen);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-elevated), var(--shadow-accent-sm);
   display: grid;
   gap: var(--space-5);
   max-height: 92vh;
@@ -67,7 +67,7 @@
 }
 
 .screenshot-modal-header small {
-  color: #94a3b8;
+  color: var(--text-soft);
 }
 
 .screenshot-modal-close {
@@ -76,12 +76,12 @@
   color: var(--modal-text);
   flex: 0 0 auto;
   height: 34px;
-  transition: background var(--duration-normal) ease, transform var(--duration-fast) var(--ease-spring);
+  transition: background var(--duration-normal) var(--ease-productive), transform var(--duration-fast) var(--ease-spring);
   width: 34px;
 }
 
 .screenshot-modal-close:hover:not(:disabled) {
-  transform: scale(1.05);
+  transform: scale(1.08);
 }
 
 .screenshot-modal-toolbar,
@@ -107,7 +107,7 @@
   height: 28px;
   min-height: 28px;
   padding: 0;
-  transition: background var(--duration-fast) ease;
+  transition: background var(--duration-fast) var(--ease-productive);
   width: 28px;
 }
 
@@ -126,7 +126,7 @@
   color: var(--modal-text);
   flex: 0 0 46px;
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   text-align: center;
 }
 
@@ -137,12 +137,13 @@
 }
 
 .screenshot-modal-viewport img {
-  background: #0f172a;
+  background: var(--phone-screen);
+  border-radius: var(--radius-md);
   display: block;
   margin: 0 auto;
   max-width: none;
   object-fit: contain;
-  transition: height 80ms ease-out;
+  transition: height 80ms var(--ease-productive);
   width: auto;
 }
 
