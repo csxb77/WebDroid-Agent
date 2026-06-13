@@ -1,24 +1,21 @@
 .device-box {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--on-primary) 12%, transparent), transparent),
-    color-mix(in srgb, var(--subtle-bg) 82%, var(--panel-bg));
-  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--on-primary) 22%, transparent) inset;
   display: grid;
   gap: 6px;
-  padding: 12px;
+  padding: 10px;
 }
 
 .device-box span {
   color: var(--text);
-  font-size: 15px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .device-details {
   display: grid;
-  gap: 7px;
+  gap: 6px;
 }
 
 .device-details summary {
@@ -27,7 +24,7 @@
   cursor: pointer;
   display: inline-flex;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   gap: 6px;
   list-style: none;
   width: fit-content;

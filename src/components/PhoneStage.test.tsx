@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { AgentStep } from '../lib/agent'
 import { APP_COPY } from '../lib/appCopy'
 import { PhoneStage } from './PhoneStage'
 
@@ -13,6 +14,33 @@ afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
 })
+
+function createPendingStep(overrides: Partial<AgentStep> = {}): AgentStep {
+  const action = { action: 'tap', x: 250, y: 500 } as const
+  return {
+    index: 1,
+    screenshot: {
+      dataUrl: 'data:image/png;base64,device',
+      modelDataUrl: 'data:image/png;base64,model',
+      modelScreen: { width: 500, height: 1000 },
+      screen: { width: 1000, height: 2000 },
+    },
+    currentApp: 'Chrome',
+    deviceState: { app: 'Chrome' },
+    modelOutput: JSON.stringify(action),
+    action,
+    executionAction: { action: 'tap', x: 500, y: 1000 },
+    preview: 'tap (250, 500)',
+    timing: {
+      captureMs: 1,
+      currentAppMs: 1,
+      modelMs: 1,
+      parseMs: 1,
+      totalMs: 4,
+    },
+    ...overrides,
+  }
+}
 
 describe('PhoneStage', () => {
   it('keeps a black phone preview visible before a screenshot exists', () => {
@@ -67,6 +95,82 @@ describe('PhoneStage', () => {
     expect(onRunInteractiveAction).toHaveBeenCalledWith({ action: 'tap', x: 540, y: 1200 })
   })
 
+  it('clamps manually generated tap coordinates to the valid screen edge', () => {
+    const onRunInteractiveAction = vi.fn()
+    render(
+      <PhoneStage
+        copy={APP_COPY['en-US']}
+        displayedScreenshot={{
+          dataUrl: 'data:image/png;base64,abc123',
+          screen: { width: 1080, height: 2400 },
+        }}
+        onRunInteractiveAction={onRunInteractiveAction}
+        pendingStep={null}
+      />,
+    )
+
+    const layer = screen.getByLabelText('Screenshot interaction layer')
+    vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue({
+      bottom: 620,
+      height: 600,
+      left: 10,
+      right: 280,
+      top: 20,
+      width: 270,
+      x: 10,
+      y: 20,
+      toJSON: () => ({}),
+    })
+
+    fireEvent.mouseDown(layer, { clientX: 280, clientY: 620 })
+    fireEvent.mouseUp(layer, { clientX: 280, clientY: 620 })
+
+    expect(screen.getByText('tap (1079, 2399)')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run generated action' }))
+
+    expect(onRunInteractiveAction).toHaveBeenCalledWith({ action: 'tap', x: 1079, y: 2399 })
+  })
+
+  it('draws pending action markers from execution coordinates mapped back to the preview', () => {
+    const { container } = render(
+      <PhoneStage
+        copy={APP_COPY['en-US']}
+        displayedScreenshot={{
+          dataUrl: 'data:image/png;base64,model',
+          screen: { width: 500, height: 1000 },
+        }}
+        pendingStep={createPendingStep({
+          action: { action: 'tap', x: 10, y: 10 },
+          executionAction: { action: 'tap', x: 500, y: 1000 },
+          preview: 'tap (10, 10)',
+        })}
+      />,
+    )
+
+    const marker = container.querySelector('.tap-marker') as HTMLElement
+
+    expect(marker).toBeTruthy()
+    expect(marker.style.left).toBe('50%')
+    expect(marker.style.top).toBe('50%')
+    expect(marker.getAttribute('title')).toBe('tap (500, 1000)')
+  })
+
+  it('does not draw a pending marker on a different displayed screenshot', () => {
+    const { container } = render(
+      <PhoneStage
+        copy={APP_COPY['en-US']}
+        displayedScreenshot={{
+          dataUrl: 'data:image/png;base64,new',
+          screen: { width: 500, height: 1000 },
+        }}
+        pendingStep={createPendingStep()}
+      />,
+    )
+
+    expect(container.querySelector('.tap-marker')).toBeNull()
+  })
+
   it('creates a swipe action from a screenshot drag', () => {
     const onRunInteractiveAction = vi.fn()
     render(
@@ -109,6 +213,42 @@ describe('PhoneStage', () => {
       toX: 540,
       toY: 800,
     })
+  })
+
+  it('shows a pending swipe path with direction and duration', () => {
+    const { container } = render(
+      <PhoneStage
+        copy={APP_COPY['en-US']}
+        displayedScreenshot={{
+          dataUrl: 'data:image/png;base64,model',
+          screen: { width: 500, height: 1000 },
+        }}
+        pendingStep={createPendingStep({
+          action: {
+            action: 'swipe',
+            durationMs: 400,
+            fromX: 125,
+            fromY: 800,
+            toX: 125,
+            toY: 200,
+          },
+          executionAction: {
+            action: 'swipe',
+            durationMs: 400,
+            fromX: 250,
+            fromY: 1600,
+            toX: 250,
+            toY: 400,
+          },
+          preview: 'swipe (125, 800) -> (125, 200), 400ms',
+        })}
+      />,
+    )
+
+    expect(screen.getByLabelText('Swipe path 400 ms')).toBeTruthy()
+    expect(screen.getByText('400 ms')).toBeTruthy()
+    expect(container.querySelector('.swipe-path-line')).toBeTruthy()
+    expect(container.querySelector('.swipe-path-arrowhead')).toBeTruthy()
   })
 
   it('sizes the screenshot interaction layer to the visible image, not letterboxed frame', () => {
@@ -217,10 +357,11 @@ describe('PhoneStage', () => {
   })
 
   it('sizes the normal phone preview to use most of the preview area', () => {
-    expect(phoneStageCss).toMatch(/\.phone-stage\s*\{[\s\S]*padding:\s*12px/)
+    expect(phoneStageCss).toMatch(/\.phone-stage\s*\{[\s\S]*padding:\s*var\(--space-6\)/)
     expect(phoneStageCss).toMatch(/\.phone-frame\s*\{[\s\S]*border:\s*8px solid/)
-    expect(phoneStageCss).toMatch(/\.phone-frame\s*\{[\s\S]*width:\s*min\(100%,\s*32\.4vh\)/)
-    expect(responsiveCss).toMatch(/\.phone-frame\s*\{[\s\S]*max-height:\s*78vh/)
+    expect(phoneStageCss).toMatch(/\.phone-frame\s*\{[\s\S]*max-height:\s*min\(82vh,\s*820px\)/)
+    expect(phoneStageCss).toMatch(/\.phone-frame\s*\{[\s\S]*width:\s*min\(100%,\s*390px\)/)
+    expect(responsiveCss).toMatch(/\.phone-frame\s*\{[\s\S]*max-height:\s*80vh/)
   })
 
   it('keeps the empty phone preview the same size as the screenshot preview', () => {

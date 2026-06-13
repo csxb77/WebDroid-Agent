@@ -143,6 +143,12 @@ function connectDeviceFromPanel(buttonName: RegExp = /connect/i) {
   fireEvent.click(screen.getAllByRole('button', { name: buttonName })[0])
 }
 
+async function waitForConnectedDeviceName(name = 'Pixel') {
+  await waitFor(() => {
+    expect(screen.getAllByText(name).length).toBeGreaterThan(0)
+  })
+}
+
 async function openInstalledAppsDialog() {
   const configPanel = document.querySelector('.config-panel') as HTMLElement
   fireEvent.click(within(configPanel).getByRole('button', { name: /installed apps/i }))
@@ -435,7 +441,19 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: /toolbox/i })).toBeNull()
   })
 
-  it('keeps the collapsed configuration rail focused on model and device only', () => {
+  it('keeps the left-panel status overview out of the configuration panel', () => {
+    render(<App />)
+
+    const configPanel = document.querySelector('.config-panel') as HTMLElement
+
+    expect(within(configPanel).queryByRole('region', { name: /configuration overview/i })).toBeNull()
+    expect(configPanel.querySelector('.config-overview')).toBeNull()
+    expect(within(configPanel).queryByText('Setup needed')).toBeNull()
+    expect(within(configPanel).queryByText('Model status')).toBeNull()
+    expect(within(configPanel).queryByText('Device status')).toBeNull()
+  })
+
+  it('keeps the collapsed configuration rail focused on left-panel sections', () => {
     render(<App />)
 
     const configPanel = document.querySelector('.config-panel')
@@ -447,15 +465,25 @@ describe('App', () => {
     expect(screen.queryByText('Model settings')).toBeNull()
 
     const rail = screen.getByRole('navigation', { name: /configuration/i })
-    expect(within(rail).getByRole('button', { name: /open model/i })).toBeTruthy()
-    expect(within(rail).getByRole('button', { name: /open device/i })).toBeTruthy()
+    expect(within(rail).getByRole('button', { name: /^open model$/i })).toBeTruthy()
+    expect(within(rail).getByRole('button', { name: /^open device$/i })).toBeTruthy()
+    expect(within(rail).getByRole('button', { name: /^open tools$/i })).toBeTruthy()
+    expect(within(rail).getByRole('button', { name: /^open device options$/i })).toBeTruthy()
     expect(within(rail).queryByRole('button', { name: /open toolbox/i })).toBeNull()
-    expect(within(rail).queryByRole('button', { name: /open tools/i })).toBeNull()
   })
 
-  it('gives the chat panel more width when the configuration panel is collapsed', () => {
+  it('prioritizes the phone preview in the desktop workspace layout', () => {
+    const compactWorkspaceBreakpoint = readMediaBlock(responsiveCss, 'max-width: 1199px')
+
     expect(layoutCss).toMatch(
-      /\.workspace-config-collapsed\s*\{[\s\S]*grid-template-columns:\s*64px\s+minmax\(304px,\s*334px\)\s+minmax\(294px,\s*1fr\)/,
+      /\.workspace\s*\{[\s\S]*grid-template-columns:\s*[\s\S]*minmax\(320px,\s*360px\)[\s\S]*minmax\(400px,\s*500px\)[\s\S]*minmax\(380px,\s*1fr\)/,
+    )
+    expect(layoutCss).toMatch(/\.phone-column\s*\{[\s\S]*width:\s*min\(100%,\s*500px\)/)
+    expect(layoutCss).toMatch(
+      /\.workspace-config-collapsed\s*\{[\s\S]*grid-template-columns:\s*64px\s+minmax\(420px,\s*520px\)\s+minmax\(380px,\s*1fr\)/,
+    )
+    expect(compactWorkspaceBreakpoint).toMatch(
+      /\.workspace\s*\{[\s\S]*grid-template-columns:\s*minmax\(280px,\s*340px\)\s+minmax\(360px,\s*1fr\)/,
     )
   })
 
@@ -466,6 +494,20 @@ describe('App', () => {
 
     expect(screen.queryByLabelText(/prompt mode/i)).toBeNull()
     expect(screen.queryByText(/autoglm native/i)).toBeNull()
+  })
+
+  it('offers pixel and normalized JSON action protocols in model settings', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByText('Model settings'))
+
+    const protocolSelect = screen.getByLabelText(/action protocol/i)
+    expect(within(protocolSelect).getByRole('option', { name: 'WebDroid JSON' })).toBeTruthy()
+    expect(
+      within(protocolSelect).getByRole('option', {
+        name: 'WebDroid Normalized JSON (0-1000)',
+      }),
+    ).toBeTruthy()
   })
 
   it('labels sensitive action confirmation by its full action scope', () => {
@@ -481,7 +523,9 @@ describe('App', () => {
   it('collapses model settings behind the current model name', () => {
     render(<App />)
 
-    expect(screen.getByText('gpt-5.5')).toBeTruthy()
+    const configPanel = document.querySelector('.config-panel') as HTMLElement
+    const modelSection = within(configPanel).getByRole('region', { name: /^model$/i })
+    expect(within(modelSection).getByText('gpt-5.5')).toBeTruthy()
     const detailsToggle = screen.getByText('Model settings')
     const details = detailsToggle.closest('details')
 
@@ -504,6 +548,20 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /hide api key/i }))
 
     expect(apiKeyInput.type).toBe('password')
+  })
+
+  it('names visible form controls to keep browser diagnostics quiet', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByText('Model settings'))
+
+    const fields = Array.from(document.querySelectorAll('input, select, textarea'))
+    expect(fields.length).toBeGreaterThan(0)
+    for (const field of fields) {
+      expect(field.getAttribute('id')).toBeTruthy()
+      expect(field.getAttribute('name')).toBeTruthy()
+    }
+    expect(screen.getByLabelText(/^api key$/i).getAttribute('autocomplete')).toBe('off')
   })
 
   it('keeps device tools directly available in the homepage configuration panel', () => {
@@ -546,7 +604,7 @@ describe('App', () => {
     render(<App />)
 
     await connectDeviceFromPanel()
-    expect(await screen.findByText('Pixel')).toBeTruthy()
+    await waitForConnectedDeviceName()
 
     const quickControls = document.querySelector('.device-quick-controls') as HTMLElement
     fireEvent.change(within(quickControls).getByLabelText(/^text$/i), {
@@ -594,24 +652,93 @@ describe('App', () => {
 
   it('keeps persistent shell controls aligned to the 8px corner system', () => {
     expect(controlsCss).toMatch(
-      /input,\s*[\r\n]+select,\s*[\r\n]+textarea\s*\{[^}]*border-radius:\s*8px/,
+      /input,\s*[\r\n]+select,\s*[\r\n]+textarea\s*\{[^}]*border-radius:\s*var\(--radius-md\)/,
     )
-    expect(controlsCss).toMatch(/[\r\n]button\s*\{[^}]*border-radius:\s*8px/)
-    expect(controlsCss).toMatch(/\.icon-button\s*\{[\s\S]*border-radius:\s*8px/)
+    expect(controlsCss).toMatch(/[\r\n]button\s*\{[^}]*border-radius:\s*var\(--radius-md\)/)
+    expect(controlsCss).toMatch(/\.icon-button\s*\{[\s\S]*border-radius:\s*var\(--radius-md\)/)
     expect(configPanelCss).toMatch(
-      /\.config-sidebar-toggle\s*\{[\s\S]*border-radius:\s*8px/,
+      /\.config-sidebar-toggle\s*\{[\s\S]*border-radius:\s*var\(--radius-md\)/,
     )
-    expect(configRailCss).toMatch(/\.config-rail-button\s*\{[\s\S]*border-radius:\s*8px/)
+    expect(configRailCss).toMatch(/\.config-rail-button\s*\{[\s\S]*border-radius:\s*var\(--radius-md\)/)
     expect(runLogCss).toMatch(/\.log-empty-state\s*\{[\s\S]*border-radius:\s*8px/)
     expect(settingsDialogCss).toMatch(
-      /\.settings-tool-search button\s*\{[\s\S]*border-radius:\s*8px/,
+      /\.settings-tool-search button\s*\{[\s\S]*border-radius:\s*var\(--radius-md\)/,
+    )
+  })
+
+  it('styles the left configuration panel as a dense operational rail', () => {
+    expect(configPanelCss).toContain('.config-section-heading')
+    expect(configPanelCss).not.toContain('.config-panel-expanded::before')
+    expect(configPanelCss).not.toContain('.config-sidebar-header::after')
+    expect(responsiveCss).not.toContain('.config-sidebar-header::after')
+    expect(configPanelCss).toMatch(
+      /\.config-sidebar-header\s*\{[^}]*border-bottom:\s*1px solid transparent/,
+    )
+    expect(configPanelCss).toMatch(
+      /\.config-panel-expanded::after\s*\{[\s\S]*position:\s*sticky/,
+    )
+    expect(configPanelCss).toMatch(
+      /\.config-panel-expanded::after\s*\{[\s\S]*bottom:\s*0/,
+    )
+    expect(configPanelCss).toMatch(
+      /\.config-section-heading\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*minmax\(0,\s*min\(46%,\s*116px\)\)/,
+    )
+    expect(configPanelCss).toMatch(
+      /\.config-section-heading > span\s*\{[\s\S]*width:\s*fit-content/,
+    )
+    expect(configPanelCss).toMatch(
+      /\.config-section-heading > span\s*\{[\s\S]*max-width:\s*100%/,
+    )
+    expect(configPanelCss).toMatch(
+      /\.config-panel-content\s*\{[\s\S]*gap:\s*var\(--space-5\)/,
+    )
+
+    const narrowLeftPanelCss = readMediaBlock(responsiveCss, 'max-width: 560px')
+    expect(narrowLeftPanelCss).not.toContain('.config-overview-grid')
+  })
+
+  it('keeps config section status badges from overlapping in narrow sidebars', () => {
+    expect(configPanelCss).toMatch(
+      /\.config-section-heading\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*minmax\(0,\s*min\(46%,\s*116px\)\)/,
+    )
+    expect(configPanelCss).toMatch(
+      /\.config-section-heading > span\s*\{[\s\S]*justify-self:\s*end/,
+    )
+    expect(configPanelCss).toMatch(
+      /\.config-section-heading > span\s*\{[\s\S]*max-width:\s*100%/,
+    )
+    expect(configPanelCss).toMatch(/\.config-section-heading > span\s*\{[\s\S]*width:\s*fit-content/)
+
+    const narrowLeftPanelCss = readMediaBlock(responsiveCss, 'max-width: 560px')
+    expect(narrowLeftPanelCss).toMatch(
+      /\.config-section-heading > span\s*\{[\s\S]*width:\s*100%/,
+    )
+    expect(narrowLeftPanelCss).not.toMatch(/\.config-section-heading > span\s*\{[\s\S]*width:\s*fit-content/)
+  })
+
+  it('gives configuration section badges semantic tones instead of one shared accent style', () => {
+    expect(configPanelCss).toContain('.config-section-badge.ready')
+    expect(configPanelCss).toContain('.config-section-badge.warning')
+    expect(configPanelCss).toContain('.config-section-badge.neutral')
+    expect(configPanelCss).toContain('.config-section-badge.count')
+    expect(configPanelCss).toMatch(
+      /\.config-section-badge\.ready\s*\{[\s\S]*background:\s*var\(--status-ok-bg\)/,
+    )
+    expect(configPanelCss).toMatch(
+      /\.config-section-badge\.warning\s*\{[\s\S]*background:\s*var\(--warn-bg\)/,
+    )
+    expect(configPanelCss).toMatch(
+      /\.config-section-badge\.neutral\s*\{[\s\S]*background:\s*var\(--status-bg\)/,
+    )
+    expect(configPanelCss).toMatch(
+      /\.config-section-badge\.count\s*\{[\s\S]*background:\s*var\(--accent-soft\)/,
     )
   })
 
   it('styles setting checkboxes as switch controls', () => {
     expect(controlsCss).toContain('.toggle input[type="checkbox"]')
     expect(controlsCss).toMatch(/appearance:\s*none/)
-    expect(controlsCss).toMatch(/border-radius:\s*999px/)
+    expect(controlsCss).toMatch(/border-radius:\s*var\(--radius-full\)/)
     expect(controlsCss).toContain('input[type="checkbox"]::before')
     expect(controlsCss).toContain('input[type="checkbox"]:checked')
     expect(controlsCss).toMatch(/transform:\s*translateX\(20px\)/)
@@ -623,7 +750,7 @@ describe('App', () => {
     expect(installedAppsCss).toContain('.installed-app-dialog-page')
     expect(installedAppsCss).toContain('.installed-app-dialog-panel')
     expect(installedAppsCss).toMatch(
-      /\.installed-app-dialog-panel\s*\{[\s\S]*width:\s*min\(92vw,\s*620px\)/,
+      /\.installed-app-dialog-panel\s*\{[\s\S]*width:\s*min\(92vw,\s*600px\)/,
     )
     expect(installedAppsCss).toMatch(/\.search-field\s*\{[\s\S]*width:\s*100%/)
     expect(installedAppsCss).toMatch(
@@ -644,28 +771,24 @@ describe('App', () => {
     expect(settingsDialogCss).toContain('.settings-tool-filters')
     expect(settingsDialogCss).toContain('.settings-tool-list')
     expect(settingsDialogCss).toContain('.settings-tool-row')
-    expect(settingsDialogCss).toContain('border-radius: 8px')
+    expect(settingsDialogCss).toContain('border-radius: var(--radius-md)')
     expect(settingsDialogCss).toMatch(
       /\.settings-tool-row\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto/,
     )
-    const narrowSettingsCss = readMediaBlock(settingsDialogCss, 'max-width: 560px')
-    expect(narrowSettingsCss).toMatch(
-      /\.settings-tool-row\s*\{[\s\S]*grid-template-columns:\s*1fr/,
-    )
-    expect(narrowSettingsCss).toMatch(
-      /\.settings-tool-summary\s*\{[\s\S]*margin-left:\s*0/,
+    expect(settingsDialogCss).toMatch(
+      /\.settings-tool-summary\s*\{[\s\S]*margin-left:\s*auto/,
     )
   })
 
   it('matches the AMC settings shell and sidebar treatment', () => {
     expect(settingsDialogCss).toMatch(
-      /\.settings-panel\s*\{[\s\S]*height:\s*min\(85dvh,\s*800px\)/,
+      /\.settings-panel\s*\{[\s\S]*height:\s*min\(85dvh,\s*780px\)/,
     )
     expect(settingsDialogCss).toMatch(
-      /\.settings-panel\s*\{[\s\S]*width:\s*min\(90vw,\s*1120px\)/,
+      /\.settings-panel\s*\{[\s\S]*width:\s*min\(90vw,\s*1080px\)/,
     )
     expect(settingsDialogCss).toMatch(
-      /\.settings-sidebar\s*\{[\s\S]*flex:\s*0 0 256px/,
+      /\.settings-sidebar\s*\{[\s\S]*flex:\s*0 0 240px/,
     )
     expect(settingsDialogCss).toMatch(
       /\.settings-tab-button\.is-active\s*\{[\s\S]*background:\s*var\(--surface-muted\)/,
@@ -736,6 +859,50 @@ describe('App', () => {
     expect(localStorage.setItem).toHaveBeenLastCalledWith(
       'webdroid-agent-settings',
       expect.stringContaining('"maxSteps":500'),
+    )
+  })
+
+  it('toggles task notifications from settings after browser permission is granted', async () => {
+    const requestPermission = vi.fn(async () => 'granted' as NotificationPermission)
+    class MockNotification {
+      static permission: NotificationPermission = 'default'
+      static requestPermission = requestPermission
+    }
+    Object.defineProperty(globalThis, 'Notification', {
+      configurable: true,
+      value: MockNotification,
+    })
+
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }))
+
+    const settingsDialog = await screen.findByRole('dialog', { name: /settings/i })
+    const taskNotificationsToggle = within(settingsDialog).getByLabelText(
+      /task notifications/i,
+    ) as HTMLInputElement
+
+    expect(taskNotificationsToggle.checked).toBe(false)
+
+    fireEvent.click(taskNotificationsToggle)
+
+    await waitFor(() => expect(requestPermission).toHaveBeenCalledTimes(1))
+    expect(taskNotificationsToggle.checked).toBe(true)
+    await waitFor(() =>
+      expect(localStorage.setItem).toHaveBeenLastCalledWith(
+        'webdroid-agent-settings',
+        expect.stringContaining('"taskNotificationsEnabled":true'),
+      ),
+    )
+
+    fireEvent.click(taskNotificationsToggle)
+
+    expect(taskNotificationsToggle.checked).toBe(false)
+    await waitFor(() =>
+      expect(localStorage.setItem).toHaveBeenLastCalledWith(
+        'webdroid-agent-settings',
+        expect.stringContaining('"taskNotificationsEnabled":false'),
+      ),
     )
   })
 
@@ -1198,7 +1365,7 @@ describe('App', () => {
       target: { value: 'secret' },
     })
     await connectDeviceFromPanel()
-    expect(await screen.findByText('Pixel')).toBeTruthy()
+    await waitForConnectedDeviceName()
 
     const configPanel = document.querySelector('.config-panel') as HTMLElement
     fireEvent.click(within(configPanel).getByRole('button', { name: /run doctor/i }))
@@ -1229,7 +1396,7 @@ describe('App', () => {
     render(<App />)
 
     await connectDeviceFromPanel()
-    expect(await screen.findByText('Pixel')).toBeTruthy()
+    await waitForConnectedDeviceName()
 
     const configPanel = document.querySelector('.config-panel') as HTMLElement
     fireEvent.click(within(configPanel).getByRole('button', { name: /enable adb text input/i }))
@@ -1347,7 +1514,7 @@ describe('App', () => {
     render(<App />)
 
     await connectDeviceFromPanel()
-    expect(await screen.findByText('Pixel')).toBeTruthy()
+    await waitForConnectedDeviceName()
 
     const installedAppsDialog = await openInstalledAppsDialog()
     const appSearch = await within(installedAppsDialog).findByLabelText(/app search/i)
@@ -1372,7 +1539,7 @@ describe('App', () => {
     render(<App />)
 
     await connectDeviceFromPanel()
-    expect(await screen.findByText('Pixel')).toBeTruthy()
+    await waitForConnectedDeviceName()
 
     const installedAppsDialog = await openInstalledAppsDialog()
     const appSearch = await within(installedAppsDialog).findByLabelText(/app search/i)
@@ -1409,7 +1576,7 @@ describe('App', () => {
     render(<App />)
 
     await connectDeviceFromPanel()
-    expect(await screen.findByText('Pixel')).toBeTruthy()
+    await waitForConnectedDeviceName()
 
     const installedAppsDialog = await openInstalledAppsDialog()
     const appSearch = await within(installedAppsDialog).findByLabelText(/app search/i)
@@ -1436,7 +1603,7 @@ describe('App', () => {
 
     await connectDeviceFromPanel()
 
-    expect(await screen.findByText('Pixel')).toBeTruthy()
+    await waitForConnectedDeviceName()
     const detailsToggle = await screen.findByText('Device details')
     const details = detailsToggle.closest('details')
 
@@ -1450,24 +1617,43 @@ describe('App', () => {
     expect(tabletBreakpoint).not.toMatch(/\.topbar\s*\{[\s\S]*?flex-direction:\s*column/)
   })
 
-  it('keeps the empty mobile chat compact enough to reveal the device preview', () => {
+  it('uses a wrapped mobile topbar instead of absolutely positioned controls', () => {
+    const mobileBreakpoint = readMediaBlock(responsiveCss, 'max-width: 620px')
+
+    expect(mobileBreakpoint).toMatch(/\.topbar\s*\{[\s\S]*grid-template-areas:/)
+    expect(mobileBreakpoint).toMatch(/\.topbar-brand\s*\{[\s\S]*grid-area:\s*brand/)
+    expect(mobileBreakpoint).toMatch(/\.topbar-actions\s*\{[\s\S]*grid-area:\s*actions/)
+    expect(mobileBreakpoint).toMatch(/\.status-strip\s*\{[\s\S]*grid-area:\s*status/)
+    expect(mobileBreakpoint).not.toMatch(/\.tutorial-button,\s*[\r\n]+\.settings-button\s*\{[\s\S]*position:\s*absolute/)
+    expect(mobileBreakpoint).not.toMatch(/\.current-app-status\s*\{[\s\S]*display:\s*none/)
+  })
+
+  it('puts the device preview before chat and configuration in single-column layouts', () => {
+    const singleColumnBreakpoint = readMediaBlock(responsiveCss, 'max-width: 899px')
+
+    expect(singleColumnBreakpoint).toMatch(/\.phone-column\s*\{[\s\S]*order:\s*1/)
+    expect(singleColumnBreakpoint).toMatch(/\.conversation-panel\s*\{[\s\S]*order:\s*2/)
+    expect(singleColumnBreakpoint).toMatch(/\.config-panel\s*\{[\s\S]*order:\s*3/)
+  })
+
+  it('keeps the empty mobile chat compact below the device preview', () => {
     const mobileBreakpoint = readMediaBlock(responsiveCss, 'max-width: 620px')
     const narrowBreakpoint = readMediaBlock(responsiveCss, 'max-width: 360px')
 
-    expect(chatPanelCss).toMatch(/\.chat-empty-icon\s*\{[\s\S]*border-radius:\s*8px/)
+    expect(chatPanelCss).toMatch(/\.chat-empty-icon\s*\{[\s\S]*border-radius:\s*var\(--radius-lg\)/)
     expect(mobileBreakpoint).toMatch(
-      /\.chat-shell:has\(\.chat-empty-state\)\s*\{[\s\S]*min-height:\s*clamp\(390px,\s*54dvh,\s*500px\)/,
+      /\.chat-shell:has\(\.chat-empty-state\)\s*\{[\s\S]*min-height:\s*clamp\(320px,\s*42dvh,\s*420px\)/,
     )
     expect(mobileBreakpoint).toMatch(
-      /\.chat-stream:has\(\.chat-empty-state\)\s*\{[\s\S]*padding-bottom:\s*94px/,
+      /\.chat-stream:has\(\.chat-empty-state\)\s*\{[\s\S]*padding-bottom:\s*var\(--space-4\)/,
     )
     expect(narrowBreakpoint).toMatch(/\.chat-empty-state\s*\{[\s\S]*transform:\s*none/)
-    expect(narrowBreakpoint).toMatch(/\.chat-empty-icon\s*\{[\s\S]*border-radius:\s*8px/)
+    expect(narrowBreakpoint).toMatch(/\.chat-empty-icon\s*\{[\s\S]*border-radius:\s*var\(--radius-md\)/)
     expect(narrowBreakpoint).toMatch(/\.chat-empty-icon\s*\{[\s\S]*height:\s*42px/)
   })
 
   it('lets the configuration panel use normal page scrolling in single-column layouts', () => {
-    const singleColumnBreakpoint = readMediaBlock(responsiveCss, 'max-width: 900px')
+    const singleColumnBreakpoint = readMediaBlock(responsiveCss, 'max-width: 899px')
 
     expect(singleColumnBreakpoint).toMatch(
       /\.config-panel-expanded\s*\{[\s\S]*max-height:\s*none/,
@@ -1501,17 +1687,15 @@ describe('App', () => {
     const narrowSettingsCss = readMediaBlock(settingsDialogCss, 'max-width: 560px')
 
     expect(narrowSettingsCss).toMatch(
-      /\.repository-stats\s*\{[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/,
+      /\.repository-stats\s*\{[\s\S]*grid-template-columns:\s*1fr/,
     )
-    expect(narrowSettingsCss).toMatch(/\.repository-stats div\s*\{[\s\S]*text-align:\s*center/)
-    expect(narrowSettingsCss).toMatch(/\.repository-stats strong\s*\{[\s\S]*font-size:\s*21px/)
+    expect(settingsDialogCss).toMatch(/\.repository-stats div\s*\{[\s\S]*justify-items:\s*start/)
+    expect(settingsDialogCss).toMatch(/\.repository-stats strong\s*\{[\s\S]*font-size:\s*var\(--text-3xl\)/)
   })
 
   it('gives resource JSON editors more reading room on narrow settings screens', () => {
-    const narrowSettingsCss = readMediaBlock(settingsDialogCss, 'max-width: 560px')
-
-    expect(narrowSettingsCss).toMatch(
-      /\.settings-resource-management textarea\s*\{[\s\S]*min-height:\s*210px/,
+    expect(settingsDialogCss).toMatch(
+      /\.settings-resource-management textarea\s*\{[\s\S]*min-height:\s*140px/,
     )
   })
 

@@ -27,15 +27,15 @@
 
 .home-device-tool-icon {
   align-items: center;
-  background: color-mix(in srgb, var(--accent-soft) 82%, var(--panel-bg));
-  border: 1px solid color-mix(in srgb, var(--accent-soft-border) 78%, transparent);
-  border-radius: 8px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-border);
+  border-radius: 6px;
   color: var(--accent-soft-text);
   display: inline-flex;
   flex: 0 0 auto;
-  height: 28px;
+  height: 26px;
   justify-content: center;
-  width: 28px;
+  width: 26px;
 }
 
 .home-device-installed-apps,
@@ -44,15 +44,12 @@
 }
 
 .home-device-options-panel {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--on-primary) 12%, transparent), transparent),
-    color-mix(in srgb, var(--subtle-bg) 82%, var(--panel-bg));
-  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--on-primary) 20%, transparent) inset;
   display: grid;
-  gap: 10px;
-  padding: 12px;
+  gap: 8px;
+  padding: 10px;
 }
 
 .home-device-options-panel .toggle span {
@@ -71,15 +68,15 @@
 .capability-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
 }
 
 .capability-grid span {
-  background: color-mix(in srgb, var(--accent-soft) 82%, var(--panel-bg));
-  border: 1px solid color-mix(in srgb, var(--accent-soft-border) 82%, transparent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-border);
   border-radius: 999px;
   color: var(--accent-soft-text);
-  font-size: 12px;
-  font-weight: 800;
-  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 7px;
 }

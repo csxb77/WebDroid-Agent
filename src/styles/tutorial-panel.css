@@ -1,31 +1,26 @@
 .tutorial-panel {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--panel-bg-elevated) 62%, transparent), transparent 220px),
-    var(--panel-glass);
-  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
-  border-radius: 8px;
-  box-shadow:
-    0 20px 50px color-mix(in srgb, var(--shadow-panel) 78%, transparent),
-    0 1px 0 color-mix(in srgb, var(--on-primary) 28%, transparent) inset;
-  backdrop-filter: blur(16px) saturate(1.08);
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-panel);
   display: grid;
-  gap: 16px;
-  margin: 0 auto 18px;
-  max-width: 1520px;
-  padding: 18px;
+  gap: 14px;
+  margin: 0 auto 16px;
+  max-width: 1480px;
+  padding: 16px;
 }
 
 .tutorial-header {
   align-items: flex-start;
   display: flex;
-  gap: 16px;
+  gap: 14px;
   justify-content: space-between;
 }
 
 .tutorial-header p:last-child {
   color: var(--text-secondary);
   font-size: 14px;
-  margin: 7px 0 0;
+  margin: 6px 0 0;
   max-width: 720px;
 }
 
@@ -39,30 +34,28 @@
 }
 
 .tutorial-steps li {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--on-primary) 12%, transparent), transparent),
-    color-mix(in srgb, var(--subtle-bg) 82%, var(--panel-bg));
-  border: 1px solid color-mix(in srgb, var(--surface-muted-border) 84%, transparent);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
   border-radius: 8px;
   display: grid;
   gap: 10px;
   grid-template-columns: auto 1fr;
-  min-height: 176px;
-  padding: 14px;
+  min-height: 160px;
+  padding: 12px;
   position: relative;
 }
 
 .tutorial-step-number {
   align-items: center;
   background: var(--primary);
-  border-radius: 999px;
+  border-radius: 50%;
   color: var(--on-primary);
   display: inline-flex;
   font-size: 12px;
-  font-weight: 800;
-  height: 24px;
+  font-weight: 600;
+  height: 22px;
   justify-content: center;
-  width: 24px;
+  width: 22px;
 }
 
 .tutorial-step-icon {
@@ -89,12 +82,10 @@
 }
 
 .tutorial-notes {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--on-primary) 12%, transparent), transparent),
-    var(--accent-soft);
-  border: 1px solid color-mix(in srgb, var(--accent-soft-border) 86%, transparent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-border);
   border-radius: 8px;
-  padding: 14px 16px;
+  padding: 12px 14px;
 }
 
 .tutorial-notes h3 {
@@ -104,7 +95,7 @@
 .tutorial-notes ul {
   color: var(--text-secondary);
   display: grid;
-  gap: 7px;
+  gap: 6px;
   font-size: 13px;
   line-height: 1.45;
   margin: 10px 0 0;
@@ -123,14 +114,12 @@
 }
 
 .tutorial-faq article {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--on-primary) 12%, transparent), transparent),
-    color-mix(in srgb, var(--subtle-bg) 82%, var(--panel-bg));
-  border: 1px solid color-mix(in srgb, var(--surface-muted-border) 84%, transparent);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
   border-radius: 8px;
   display: grid;
   gap: 6px;
-  padding: 12px;
+  padding: 10px;
 }
 
 .tutorial-faq h4 {
@@ -159,7 +148,7 @@
 
 @media (max-width: 620px) {
   .tutorial-panel {
-    padding: 14px;
+    padding: 12px;
   }
 
   .tutorial-header {

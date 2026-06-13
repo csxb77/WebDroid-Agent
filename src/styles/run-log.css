@@ -1,17 +1,17 @@
 .log-drawer {
-  margin: 18px auto 0;
-  max-width: 1520px;
+  margin: 16px auto 0;
+  max-width: 1480px;
 }
 
 .log-drawer > summary {
   grid-template-columns: 4px minmax(0, auto) minmax(0, 1fr) 14px;
-  min-height: 44px;
+  min-height: 42px;
 }
 
 .log-drawer > summary small {
   color: var(--text-soft);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   overflow: hidden;
   text-align: right;
   text-overflow: ellipsis;
@@ -32,27 +32,25 @@
   border: 0;
   box-shadow: none;
   margin: 0;
-  padding: 18px;
+  padding: 16px;
 }
 
 .log-list {
   display: grid;
   gap: 10px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .log-empty-state {
   align-items: center;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--panel-bg-elevated) 48%, transparent), transparent),
-  color-mix(in srgb, var(--subtle-bg) 82%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--text-soft);
   display: flex;
-  gap: 9px;
-  min-height: 48px;
-  padding: 0 13px;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 12px;
 }
 
 .log-empty-state svg {
@@ -66,16 +64,13 @@
 }
 
 .log-entry {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--on-primary) 10%, transparent), transparent),
-    color-mix(in srgb, var(--subtle-bg) 72%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
-  border-left: 4px solid var(--border-strong);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
   border-radius: 8px;
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--on-primary) 16%, transparent) inset;
   display: grid;
   gap: 5px;
-  padding: 11px 12px;
+  padding: 10px 12px;
 }
 
 .log-entry.with-screenshot {
@@ -107,15 +102,15 @@
 }
 
 .log-entry.ok {
-  border-color: color-mix(in srgb, var(--primary) 70%, var(--border));
+  border-color: var(--status-ok-border);
 }
 
 .log-entry.warn {
-  border-color: color-mix(in srgb, var(--warn) 78%, var(--border));
+  border-color: var(--warn-border);
 }
 
 .log-entry.error {
-  border-color: color-mix(in srgb, var(--danger) 78%, var(--border));
+  border-color: var(--danger-border);
 }
 
 .log-entry time {
@@ -128,22 +123,20 @@
 }
 
 .log-entry pre {
-  background: var(--subtle-bg);
+  background: var(--panel-bg);
   border-radius: 6px;
   color: var(--text-secondary);
   margin: 2px 0 0;
-  max-height: 170px;
+  max-height: 160px;
   overflow: auto;
-  padding: 10px;
+  padding: 8px;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .step-timeline {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--on-primary) 10%, transparent), transparent),
-    color-mix(in srgb, var(--subtle-bg) 82%, var(--panel-bg));
-  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
   border-radius: 8px;
   display: grid;
   gap: 8px;
@@ -163,7 +156,7 @@
   border-radius: 999px;
   color: var(--status-ok-text);
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 600;
   padding: 3px 8px;
 }
 
@@ -181,12 +174,12 @@
 .step-timeline-field > span {
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .step-timeline-field pre {
   margin: 0;
-  max-height: 110px;
+  max-height: 100px;
 }
 
 .log-screenshot-button {
@@ -194,11 +187,11 @@
   border: 0;
   border-radius: 6px;
   cursor: zoom-in;
-  height: 144px;
+  height: 140px;
   overflow: hidden;
   padding: 0;
   position: relative;
-  width: 108px;
+  width: 106px;
 }
 
 .log-screenshot-button img {
@@ -210,7 +203,7 @@
 
 .log-screenshot-overlay {
   align-items: center;
-  background: rgba(23, 32, 38, 0.55);
+  background: rgba(0, 0, 0, 0.5);
   bottom: 0;
   color: var(--on-primary);
   display: flex;

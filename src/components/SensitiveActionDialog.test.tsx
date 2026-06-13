@@ -61,7 +61,7 @@ describe('SensitiveActionDialog', () => {
 
   it('keeps long sensitive confirmations scrollable with reachable actions', () => {
     expect(sensitiveActionDialogCss).toMatch(
-      /\.sensitive-action-dialog-panel\s*\{[\s\S]*max-height:\s*min\(calc\(100dvh - 48px\),\s*620px\)/,
+      /\.sensitive-action-dialog-panel\s*\{[\s\S]*max-height:\s*min\(calc\(100dvh - 48px\),\s*600px\)/,
     )
     expect(sensitiveActionDialogCss).toMatch(
       /\.sensitive-action-dialog-panel\s*\{[\s\S]*overflow-y:\s*auto/,

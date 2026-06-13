@@ -14,6 +14,7 @@ import {
 } from '../lib/agentThread'
 import { buildInteractionStream } from '../lib/interactionStream'
 import { ConversationPanel } from './ConversationPanel'
+import { AppProvider } from './AppContext'
 
 const screenshot: DeviceScreenshot = {
   bytes: new Uint8Array([1, 2, 3]),
@@ -34,7 +35,6 @@ function renderConversationPanel(
     busyTask: null,
     chatInput: '',
     conversation: [],
-    copy: APP_COPY['en-US'],
     historySidebarOpen: false,
     onChatInputChange: vi.fn(),
     onCloseHistorySidebar: vi.fn(),
@@ -46,11 +46,16 @@ function renderConversationPanel(
     onSubmitChatMessage: vi.fn(),
     onToggleHistorySidebar: vi.fn(),
     pendingStep: null,
+    queuedChatMessageCount: 0,
     threadSummaries: [],
     ...overrides,
   }
 
-  return render(<ConversationPanel {...props} />)
+  return render(
+    <AppProvider value={{ copy: APP_COPY['en-US'], locale: 'en-US' }}>
+      <ConversationPanel {...props} />
+    </AppProvider>,
+  )
 }
 
 describe('ConversationPanel', () => {
@@ -68,7 +73,7 @@ describe('ConversationPanel', () => {
     })
     const toggleIcon = historyToggle.querySelector('svg')
     expect(historyToggle.className).toContain('chat-history-toggle')
-    expect(historyToggle.className).not.toContain('icon-button')
+    expect(historyToggle.className).toContain('icon-button')
     expect(toggleIcon?.getAttribute('viewBox')).toBe('0 0 24 24')
     expect(toggleIcon?.querySelectorAll('line')).toHaveLength(2)
     expect(toggleIcon?.querySelector('line[x1="4"][x2="20"][y1="8"][y2="8"]')).toBeTruthy()
@@ -214,11 +219,14 @@ describe('ConversationPanel', () => {
   })
 
   it('uses the AMC-style chat input shell', () => {
+    expect(chatComposerCss).toMatch(/\.chat-composer\s*\{[\s\S]*position:\s*relative/)
+    expect(chatComposerCss).not.toMatch(/\.chat-composer\s*\{[\s\S]*position:\s*absolute/)
+    expect(chatComposerCss).not.toMatch(/\.chat-composer\s*\{[\s\S]*pointer-events:\s*none/)
     expect(chatComposerCss).toMatch(
       /\.chat-input-frame\s*\{[\s\S]*background:\s*var\(--field-bg\)/,
     )
     expect(chatComposerCss).toMatch(
-      /\.chat-input-frame\s*\{[\s\S]*border-radius:\s*26px/,
+      /\.chat-input-frame\s*\{[\s\S]*border-radius:\s*(20px|var\(--radius-xl\))/,
     )
     expect(chatComposerCss).toMatch(
       /\.chat-input-frame\s*\{[\s\S]*display:\s*flex/,
@@ -229,12 +237,12 @@ describe('ConversationPanel', () => {
     expect(chatComposerCss).toMatch(
       /\.chat-input-frame:focus-within\s*\{[\s\S]*border-color:\s*var\(--accent\)/,
     )
-    expect(chatComposerCss).toMatch(/\.chat-input\s*\{[\s\S]*min-height:\s*26px/)
+    expect(chatComposerCss).toMatch(/\.chat-input\s*\{[\s\S]*min-height:\s*24px/)
     expect(chatComposerCss).toMatch(/\.chat-input\s*\{[\s\S]*border-radius:\s*0/)
     expect(chatComposerCss).toMatch(
       /\.chat-input:focus,\s*[\r\n]+\.chat-input:focus-visible\s*\{[\s\S]*box-shadow:\s*none/,
     )
-    expect(chatComposerCss).toMatch(/\.chat-send\s*\{[\s\S]*height:\s*40px/)
+    expect(chatComposerCss).toMatch(/\.chat-send\s*\{[\s\S]*height:\s*38px/)
     expect(chatComposerCss).not.toContain('backdrop-filter')
   })
 
@@ -336,17 +344,16 @@ describe('ConversationPanel', () => {
 
   it('styles the chat sidebar toggle like AMC', () => {
     expect(chatHistoryCss).toMatch(/\.chat-history-toggle\s*\{[^}]*background:\s*transparent/)
-    expect(chatHistoryCss).toMatch(/\.chat-history-toggle\s*\{[^}]*border-radius:\s*12px/)
-    expect(chatHistoryCss).toMatch(/\.chat-history-toggle\s*\{[^}]*height:\s*36px/)
-    expect(chatHistoryCss).toMatch(/\.chat-history-toggle\s*\{[^}]*width:\s*36px/)
+    expect(chatHistoryCss).toMatch(/\.chat-history-toggle\s*\{[^}]*border-radius:\s*var\(--radius-md\)/)
+    expect(chatHistoryCss).toMatch(/\.chat-history-toggle\s*\{[^}]*height:\s*34px/)
+    expect(chatHistoryCss).toMatch(/\.chat-history-toggle\s*\{[^}]*width:\s*34px/)
     expect(chatHistoryCss).toMatch(
-      /\.chat-history-toggle\s*\{[^}]*cubic-bezier\(0\.19,\s*1,\s*0\.22,\s*1\)/,
+      /\.chat-history-toggle\s*\{[^}]*transition:\s*[^}]*color/,
     )
   })
 
-  it('does not draw a divider below the chat header', () => {
-    expect(chatPanelCss).not.toMatch(/\.chat-shell-header\s*\{[^}]*border-bottom/)
-    expect(chatPanelCss).not.toMatch(/\.chat-shell-header\s*\{[^}]*box-shadow/)
+  it('draws a subtle divider below the chat header', () => {
+    expect(chatPanelCss).toMatch(/\.chat-shell-header\s*\{[^}]*border-bottom/)
   })
 
   it('submits chat with Enter while keeping Shift Enter for multiline input', () => {

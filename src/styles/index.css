@@ -1,4 +1,5 @@
 @import './theme.css';
+@import './primitives.css';
 @import './layout.css';
 @import './controls.css';
 @import './compact-section.css';

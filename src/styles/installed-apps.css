@@ -1,7 +1,8 @@
 .installed-app-dialog-page {
   align-items: center;
-  background: color-mix(in srgb, var(--overlay) 86%, transparent);
-  backdrop-filter: blur(14px) saturate(1.08);
+  animation: app-dialog-overlay-in 200ms var(--ease-out-expo);
+  background: var(--overlay);
+  backdrop-filter: blur(8px) saturate(1.05);
   bottom: 0;
   display: flex;
   justify-content: center;
@@ -14,33 +15,50 @@
   z-index: 45;
 }
 
+@keyframes app-dialog-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .installed-app-dialog-panel {
+  animation: app-dialog-panel-in 350ms var(--ease-out-expo);
   background: var(--panel-bg);
-  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  border-radius: 8px;
-  box-shadow: 0 25px 50px -12px color-mix(in srgb, var(--shadow-strong) 88%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-elevated);
   display: grid;
-  gap: 14px;
-  max-height: min(calc(100vh - 48px), 720px);
-  max-height: min(calc(100dvh - 48px), 720px);
-  max-width: 620px;
+  gap: var(--space-5);
+  max-height: min(calc(100vh - 48px), 700px);
+  max-height: min(calc(100dvh - 48px), 700px);
+  max-width: 600px;
   min-height: 0;
   overflow: hidden;
-  padding: 18px;
-  width: min(92vw, 620px);
+  padding: var(--space-7);
+  width: min(92vw, 600px);
+}
+
+@keyframes app-dialog-panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .installed-app-dialog-header {
   align-items: center;
   display: flex;
-  gap: 12px;
+  gap: var(--space-5);
   justify-content: space-between;
   min-width: 0;
 }
 
 .installed-app-dialog-header h2 {
   color: var(--text);
-  font-size: 18px;
+  font-size: var(--text-xl);
   line-height: 1.2;
   margin: 0;
   min-width: 0;
@@ -53,22 +71,22 @@
   background: transparent;
   border: 0;
   color: var(--text-soft);
+  transition: background var(--duration-normal) ease, color var(--duration-normal) ease, transform var(--duration-fast) var(--ease-spring);
 }
 
 .installed-app-dialog-close:hover:not(:disabled) {
   background: var(--surface-muted);
   color: var(--text);
+  transform: scale(1.05);
 }
 
 .installed-app-panel {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--on-primary) 12%, transparent), transparent),
-    color-mix(in srgb, var(--subtle-bg) 82%, var(--panel-bg));
-  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  border-radius: 8px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   display: grid;
-  gap: 10px;
-  padding: 12px;
+  gap: var(--space-3);
+  padding: var(--space-4);
 }
 
 .installed-app-dialog-panel .installed-app-panel {
@@ -80,12 +98,12 @@
 
 .installed-app-panel > strong {
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 
 .search-field {
   display: grid;
-  gap: 7px;
+  gap: var(--space-2);
   min-width: 0;
   width: 100%;
 }
@@ -119,61 +137,65 @@
   box-shadow: none;
   color: var(--text-soft);
   display: inline-flex;
-  height: 28px;
+  height: 26px;
   justify-content: center;
-  min-height: 28px;
+  min-height: 26px;
   padding: 0;
   position: absolute;
   right: 5px;
   top: 50%;
   transform: translateY(-50%);
-  width: 28px;
+  transition: background var(--duration-fast) ease, color var(--duration-fast) ease;
+  width: 26px;
 }
 
 .search-clear-button:hover {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--on-primary) 10%, transparent), transparent),
-    var(--button-bg-hover);
+  background: var(--button-bg-hover);
   color: var(--text);
 }
 
 .search-clear-button:focus-visible {
-  outline: 3px solid var(--focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
 .installed-app-empty {
-  background: color-mix(in srgb, var(--surface-muted) 82%, transparent);
-  border: 1px dashed color-mix(in srgb, var(--border) 84%, transparent);
-  border-radius: 8px;
+  background: var(--surface-muted);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
-  padding: 10px;
+  padding: var(--space-4);
 }
 
 .installed-app-list {
   display: grid;
-  gap: 8px;
-  max-height: 260px;
+  gap: var(--space-3);
+  max-height: 240px;
   overflow: auto;
 }
 
 .installed-app-dialog-panel .installed-app-list {
-  max-height: min(52vh, 430px);
-  max-height: min(52dvh, 430px);
+  max-height: min(50vh, 410px);
+  max-height: min(50dvh, 410px);
 }
 
 .installed-app-row {
   align-items: center;
-  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-top: 1px solid var(--border);
   display: grid;
-  gap: 8px;
+  gap: var(--space-3);
   grid-template-columns: minmax(0, 1fr) auto;
-  padding-top: 8px;
+  padding-top: var(--space-3);
+  transition: background var(--duration-fast) ease;
 }
 
 .installed-app-row:first-child {
   border-top: 0;
   padding-top: 0;
+}
+
+.installed-app-row:hover {
+  background: color-mix(in srgb, var(--surface-muted) 50%, transparent);
 }
 
 .installed-app-row div {
@@ -184,7 +206,7 @@
 
 .installed-app-row strong {
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--text-base);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -192,30 +214,30 @@
 
 .installed-app-row small {
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
 
 .installed-app-row button {
-  min-height: 34px;
-  padding: 0 10px;
+  min-height: 32px;
+  padding: 0 var(--space-4);
 }
 
 .muted.compact {
-  font-size: 12px;
+  font-size: var(--text-sm);
   margin: 0;
 }
 
 @media (max-width: 520px) {
   .installed-app-dialog-page {
     align-items: flex-end;
-    padding: 12px;
+    padding: var(--space-5);
   }
 
   .installed-app-dialog-panel {
     max-height: calc(100vh - 24px);
     max-height: calc(100dvh - 24px);
-    padding: 16px;
+    padding: var(--space-6);
     width: 100%;
   }
 
