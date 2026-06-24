@@ -270,7 +270,7 @@ describe('buildInputCommandSequence', () => {
     ])
 
     expect(buildInputCommandSequence({ action: 'open_url', url: 'https://example.com' })).toEqual([
-      ['am', 'start', '-a', 'android.intent.action.VIEW', '-d', 'https://example.com'],
+      ['am', 'start', '-a', 'android.intent.action.VIEW', '-d', "'https://example.com'"],
     ])
 
     expect(buildInputCommandSequence({ action: 'paste' })).toEqual([

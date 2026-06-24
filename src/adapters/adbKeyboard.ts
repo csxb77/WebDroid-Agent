@@ -4,7 +4,7 @@ export const ADB_KEYBOARD_APK_URL =
 export const ADB_KEYBOARD_REMOTE_APK_PATH = '/data/local/tmp/webdroid-adbkeyboard.apk'
 
 export function escapeInputText(text: string) {
-  return text.replace(/\s/g, '%s')
+  return text.replace(/\\/g, '\\\\').replace(/\s/g, '%s')
 }
 
 export function isAndroidInputTextSafe(text: string) {

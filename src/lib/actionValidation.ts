@@ -52,7 +52,11 @@ function validateActionAtDepth(
   switch (action) {
     case 'launch': {
       const app = readFirstString(candidate, ['app'])
-      const packageName = optionalString(candidate, 'packageName') ?? optionalPackageNameFromApp(app)
+      const explicitPackageName = optionalString(candidate, 'packageName')
+      if (explicitPackageName && !isValidPackageName(explicitPackageName)) {
+        throw new ActionValidationError('packageName must be a valid Android package name.')
+      }
+      const packageName = explicitPackageName ?? optionalPackageNameFromApp(app)
       return withReason(packageName ? { action, app, packageName } : { action, app }, candidate)
     }
     case 'tap': {
@@ -502,7 +506,14 @@ function readCustomToolInput(record: Record<string, unknown>) {
 }
 
 function optionalPackageNameFromApp(app: string): string | undefined {
-  return app.includes('.') ? app : undefined
+  if (!app.includes('.')) {
+    return undefined
+  }
+  return isValidPackageName(app) ? app : undefined
+}
+
+function isValidPackageName(value: string): boolean {
+  return /^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/.test(value)
 }
 
 function hasControlCharacters(value: string) {
