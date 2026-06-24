@@ -523,14 +523,6 @@ function hasControlCharacters(value: string) {
   })
 }
 
-function hasNullCharacter(value: string) {
-  return value.includes('\0')
-}
-
-function hasUriScheme(value: string) {
-  return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)
-}
-
 const ALLOWED_URI_SCHEMES = ['http', 'https', 'mailto', 'tel', 'market'] as const
 
 function hasAllowedUriScheme(value: string): boolean {
