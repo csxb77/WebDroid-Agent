@@ -291,7 +291,7 @@
 .chat-history-status-dot.status-awaiting_review,
 .chat-history-status-dot.status-awaiting_takeover {
   background: var(--accent);
-  box-shadow: 0 0 0 1px var(--border), 0 0 8px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 0 0 1px var(--border), 0 0 8px rgba(59, 130, 246, 0.4);
 }
 
 .chat-history-status-dot.status-done {

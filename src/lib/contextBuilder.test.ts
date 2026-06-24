@@ -73,6 +73,22 @@ describe('context builder', () => {
     expect(context.text).toContain('Step 1')
   })
 
+  it('describes normalized coordinate mode when using the normalized JSON protocol', () => {
+    const context = buildAgentPromptContext({
+      actionProtocol: 'webdroid_normalized_json',
+      task: 'Tap center',
+      screen: { width: 500, height: 1000 },
+      deviceScreen: { width: 1000, height: 2000 },
+      currentApp: 'Chrome',
+      deviceState: { app: 'Chrome' },
+    })
+
+    expect(context.text).toContain('"coordinate_mode":"normalized_0_1000"')
+    expect(context.text).toContain('"coordinate_range":"0..1000"')
+    expect(context.text).toContain('0-1000 normalized coordinates')
+    expect(context.text).toContain('Vision-Pointer')
+  })
+
   it('caps the installed app prompt list while keeping the requested app', () => {
     const installedApps = Array.from({ length: 45 }, (_, index) => ({
       packageName: `com.example.app${index}`,
@@ -225,7 +241,7 @@ describe('context builder', () => {
     expect(context.text).not.toContain('Use the work Gmail account.')
     expect(context.text).not.toContain('Verification code is 123456.')
     expect(context.text).toContain('without storing durable memory')
-    expect(context.text).not.toContain('store the code with note/remember')
+    expect(context.text).not.toContain('store the code with note')
   })
 
   it('includes local and thread memory only when memory is enabled', () => {
@@ -245,7 +261,7 @@ describe('context builder', () => {
     expect(context.text).toContain('Durable memory:')
     expect(context.text).toContain('- Verification code is 123456.')
     expect(context.text).toContain('- Use the work Gmail account.')
-    expect(context.text).toContain('store the code with note/remember')
+    expect(context.text).toContain('store the code with note')
   })
 
   it('includes runtime action tool signatures when provided', () => {

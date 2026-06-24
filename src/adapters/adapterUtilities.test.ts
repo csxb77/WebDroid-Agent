@@ -352,7 +352,7 @@ describe('keyToAndroidKeyCode', () => {
 })
 
 describe('resolveAppPackage', () => {
-  it('maps common Open-AutoGLM app names to Android packages', () => {
+  it('maps common app names to Android packages', () => {
     expect(resolveAppPackage('京东')).toBe('com.jingdong.app.mall')
     expect(resolveAppPackage('B站')).toBe('tv.danmaku.bili')
     expect(resolveAppPackage('哔哩哔哩')).toBe('tv.danmaku.bili')

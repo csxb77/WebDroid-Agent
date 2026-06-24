@@ -1,10 +1,13 @@
 import {
   Bot,
+  Wrench,
   PanelLeftClose,
   PanelLeftOpen,
+  Settings2,
   Usb,
 } from 'lucide-react'
-import type { AppCopy } from '../lib/appCopy'
+import { useAppCopy } from './AppContext'
+import { IconButton } from './primitives'
 import type { ActionProtocol } from '../lib/actionProtocol'
 import type { ModelConfig } from '../lib/openAiTypes'
 import { ConfigRail, type ConfigRailItem } from './ConfigRail'
@@ -20,7 +23,6 @@ import type {
 import { ModelPanel } from './ModelPanel'
 
 export type ConfigSidebarProps = {
-  copy: AppCopy
   deviceActions: DeviceControlActions
   deviceOptions: DeviceControlOptions
   deviceState: DeviceControlState
@@ -43,7 +45,6 @@ export type ConfigSidebarProps = {
 }
 
 export function ConfigSidebar({
-  copy,
   deviceActions,
   deviceOptions,
   deviceState,
@@ -61,9 +62,12 @@ export function ConfigSidebar({
   screenBlackoutDuringAutoControl,
   streamResponses,
 }: ConfigSidebarProps) {
+  const copy = useAppCopy()
   const railItems: ConfigRailItem<ConfigTarget>[] = [
     { icon: Bot, label: copy.model, target: 'model' },
     { icon: Usb, label: copy.device, target: 'device' },
+    { icon: Wrench, label: copy.tools, target: 'tools' },
+    { icon: Settings2, label: copy.deviceOptions, target: 'options' },
   ]
 
   return (
@@ -77,16 +81,16 @@ export function ConfigSidebar({
     >
       <div className="config-sidebar-header">
         {isOpen ? <span className="config-sidebar-title">{copy.configurationPanel}</span> : null}
-        <button
-          type="button"
-          className="icon-button config-sidebar-toggle"
+        <IconButton
+          size="md"
           aria-expanded={isOpen}
           aria-label={isOpen ? copy.collapseConfigurationPanel : copy.expandConfigurationPanel}
           title={isOpen ? copy.collapseConfigurationPanel : copy.expandConfigurationPanel}
           onClick={onToggleOpen}
+          className="config-sidebar-toggle"
         >
           {isOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}
-        </button>
+        </IconButton>
       </div>
 
       {isOpen ? (
@@ -114,7 +118,12 @@ export function ConfigSidebar({
             state={deviceState}
           />
 
-          <DeviceToolsSection actions={deviceActions} copy={copy} state={deviceState} />
+          <DeviceToolsSection
+            actions={deviceActions}
+            copy={copy}
+            sectionId={CONFIG_TARGET_IDS.tools}
+            state={deviceState}
+          />
 
           <DeviceHomeOptionsSection
             actions={deviceActions}
@@ -123,6 +132,7 @@ export function ConfigSidebar({
             onMemoryEnabledChange={onMemoryEnabledChange}
             onScreenBlackoutDuringAutoControlChange={onScreenBlackoutDuringAutoControlChange}
             options={deviceOptions}
+            sectionId={CONFIG_TARGET_IDS.options}
             screenBlackoutDuringAutoControl={screenBlackoutDuringAutoControl}
           />
         </div>

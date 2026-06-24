@@ -35,15 +35,22 @@ export function DevicePanel({
   } = actions
   const isBusy = Boolean(busyTask)
   const currentAppLabel = formatCurrentAppLabel(currentApp, copy)
+  const deviceLabel = deviceInfo?.name || copy.noDevice
+  const deviceBadgeTone = connected ? 'neutral' : 'warning'
 
   return (
     <section className="config-panel-group" id={sectionId} aria-label={copy.device}>
-      <div className="panel-title">
-        <Usb size={18} />
-        <h2>{copy.device}</h2>
+      <div className="config-section-heading">
+        <div className="panel-title">
+          <Usb size={18} />
+          <h2>{copy.device}</h2>
+        </div>
+        <span className={`config-section-badge ${deviceBadgeTone}`}>
+          {connected ? currentAppLabel : copy.noDevice}
+        </span>
       </div>
       <div className="device-box">
-        <span>{deviceInfo?.name || copy.noDevice}</span>
+        <span>{deviceLabel}</span>
         {connected && deviceInfo ? (
           <details className="device-details">
             <summary>{copy.deviceDetails}</summary>
@@ -65,26 +72,36 @@ export function DevicePanel({
       <div className="button-row">
         <button
           type="button"
+          className="primary"
           onClick={onConnectDevice}
           disabled={isBusy || connected}
         >
           <Cable size={16} />
           {copy.connect}
         </button>
-        <button type="button" onClick={onDisconnectDevice} disabled={isBusy || !connected}>
-          <Unplug size={16} />
-          {copy.disconnect}
-        </button>
+        {connected ? (
+          <button
+            type="button"
+            className="secondary"
+            onClick={onDisconnectDevice}
+            disabled={isBusy}
+          >
+            <Unplug size={16} />
+            {copy.disconnect}
+          </button>
+        ) : null}
       </div>
-      <button
-        type="button"
-        className="wide"
-        onClick={onCaptureScreen}
-        disabled={isBusy || !connected}
-      >
-        <Camera size={16} />
-        {copy.capture}
-      </button>
+      {connected ? (
+        <button
+          type="button"
+          className="wide secondary"
+          onClick={onCaptureScreen}
+          disabled={isBusy}
+        >
+          <Camera size={16} />
+          {copy.capture}
+        </button>
+      ) : null}
     </section>
   )
 }

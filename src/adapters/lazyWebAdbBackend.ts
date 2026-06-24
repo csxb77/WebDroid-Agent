@@ -2,6 +2,7 @@ import type {
   DeviceBackend,
   DeviceInfo,
   DeviceScreenshot,
+  DeviceScreenshotOptions,
   DeviceState,
   DeviceTimingConfig,
   ExecuteActionOptions,
@@ -29,8 +30,8 @@ export class LazyWebAdbDeviceBackend implements DeviceBackend {
     await backend.disconnect()
   }
 
-  async screenshot(): Promise<DeviceScreenshot> {
-    return this.#loadBackend().then((backend) => backend.screenshot())
+  async screenshot(options?: DeviceScreenshotOptions): Promise<DeviceScreenshot> {
+    return this.#loadBackend().then((backend) => backend.screenshot(options))
   }
 
   async getCurrentApp(): Promise<string> {

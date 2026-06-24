@@ -1,34 +1,21 @@
 .model-box {
-  background: var(--surface-muted);
-  backdrop-filter: blur(16px) saturate(1.2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
   display: grid;
   gap: var(--space-4);
-  padding: var(--space-5);
 }
 
 .model-config-status {
-  background: var(--panel-bg);
-  backdrop-filter: blur(20px) saturate(1.3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-left: 2px solid var(--border);
   display: grid;
-  gap: var(--space-3);
-  padding: var(--space-5);
-  transition:
-    border-color var(--duration-normal) var(--ease-productive),
-    box-shadow var(--duration-moderate) var(--ease-productive);
+  gap: var(--space-2);
+  padding-left: var(--space-3);
 }
 
 .model-config-status.ready {
-  border-color: var(--status-ok-border);
-  box-shadow: inset 3px 0 0 var(--primary), var(--glow-primary);
+  border-left-color: var(--primary);
 }
 
 .model-config-status.needs-config {
-  border-color: var(--warn-border);
-  box-shadow: inset 3px 0 0 var(--warn), var(--glow-warn);
+  border-left-color: var(--warn);
 }
 
 .model-config-status-header {
@@ -89,7 +76,7 @@
 }
 
 .model-config-chip:hover {
-  transform: scale(1.05);
+  opacity: 0.85;
 }
 
 .model-config-status.needs-config .model-config-chip {

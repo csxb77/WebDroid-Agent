@@ -6,10 +6,14 @@ import type {
   InstalledApp,
 } from '../adapters/deviceTypes'
 import { buildActionPreview } from './actionPreview'
-import type { AgentAction } from './actionTypes'
+import { ActionValidationError, type AgentAction } from './actionTypes'
 import { parseModelAction } from './actionParser'
 import { createDefaultAppCards, resolveAppCard, type AppCardMap } from './appCards'
 import type { ActionProtocol } from './actionProtocol'
+import {
+  coordinateModeForActionProtocol,
+  retryCoordinateInstructionForActionProtocol,
+} from './coordinateSystems'
 import {
   customToolDescriptors,
   secretDescriptors,
@@ -54,6 +58,8 @@ import { isAbortError, throwIfAborted, withAbort } from './abortSignal'
 
 const MAX_AUTO_RECOVERABLE_EXECUTION_FAILURES = 2
 const RUN_RESULT_MODEL_OUTPUT_MAX_LENGTH = 4000
+const INVALID_MODEL_ACTION_PREVIEW = 'invalid action'
+const INVALID_MODEL_ACTION_MESSAGE = 'Model returned an invalid action.'
 
 export type AgentTiming = {
   captureMs: number
@@ -136,7 +142,7 @@ export type AgentRunnerInput = {
   onMemoryItem?: (information: string) => void
   signal?: AbortSignal
   onSnapshot?: (snapshot: AgentDeviceSnapshot) => void | Promise<void>
-  onStep?: (step: AgentStep) => void
+  onStep?: (step: AgentStep) => void | Promise<void>
   onExecuted?: (step: AgentStep, result: string) => void | Promise<void>
   onFinalResponse?: (response: string) => void | Promise<void>
   confirmSensitiveAction?: ExecuteActionOptions['confirmSensitiveAction']
@@ -154,6 +160,16 @@ export type AgentSession = AgentThread
 export type RecordAgentStepOptions = {
   memoryEnabled?: boolean
   onMemoryItem?: (information: string) => void
+}
+
+class InvalidModelActionError extends Error {
+  step: AgentStep
+
+  constructor(message: string, step: AgentStep) {
+    super(message)
+    this.name = 'InvalidModelActionError'
+    this.step = step
+  }
 }
 
 export function createAgentSession(task: string): AgentSession {
@@ -326,9 +342,10 @@ export async function runAgentStep({
   unrestrictedMode,
 }: RunAgentStepInput): Promise<AgentStep> {
   throwIfAborted(signal)
+  const coordinateMode = coordinateModeForActionProtocol(actionProtocol)
   const startedAt = now()
   const captureStartedAt = now()
-  const screenshot = await withAbort(device.screenshot(), signal)
+  const screenshot = await withAbort(device.screenshot({ coordinateMode }), signal)
   const captureMs = elapsed(captureStartedAt)
   const currentAppStartedAt = now()
   const deviceState = await getDeviceStateOrUnknown(device, signal)
@@ -366,6 +383,7 @@ export async function runAgentStep({
   const promptSecrets = secretDescriptors(secrets ?? [])
   const builtContext = buildAgentPromptContext({
     thread: session,
+    actionProtocol,
     task,
     latestUserMessage: session ? latestUserMessage(session.messages) : undefined,
     pendingUserMessages: pendingUserMessages.map((message) => message.message),
@@ -413,12 +431,34 @@ export async function runAgentStep({
   let modelOutput = await completeActionWithEmptyContentRetry(client, completionRequest)
   let modelMs = elapsed(modelStartedAt)
   let parseStartedAt = now()
-  let action = parseActionOrError(modelOutput, modelScreenshot.screen)
+  let action = parseActionOrError(modelOutput, modelScreenshot.screen, actionProtocol)
   let parseMs = elapsed(parseStartedAt)
 
   if (action instanceof Error) {
-    if (!client.repairAction) {
+    if (!isRecoverableActionValidationError(action)) {
       throw action
+    }
+    if (!client.repairAction) {
+      throw createInvalidModelActionError({
+        error: action,
+        index,
+        task,
+        session,
+        pendingUserMessages,
+        recalledScreenshot,
+        promptContext,
+        screenshot: retainedScreenshot,
+        currentApp,
+        deviceState,
+        modelOutput,
+        timing: {
+          captureMs,
+          currentAppMs,
+          modelMs,
+          parseMs,
+          totalMs: elapsed(startedAt),
+        },
+      })
     }
 
     const repairStartedAt = now()
@@ -433,7 +473,34 @@ export async function runAgentStep({
     modelMs += elapsed(repairStartedAt)
 
     parseStartedAt = now()
-    action = parseModelAction(modelOutput, modelScreenshot.screen)
+    try {
+      action = parseModelAction(modelOutput, modelScreenshot.screen, actionProtocol)
+    } catch (caught) {
+      parseMs += elapsed(parseStartedAt)
+      if (isRecoverableActionValidationError(caught)) {
+        throw createInvalidModelActionError({
+          error: caught,
+          index,
+          task,
+          session,
+          pendingUserMessages,
+          recalledScreenshot,
+          promptContext,
+          screenshot: retainedScreenshot,
+          currentApp,
+          deviceState,
+          modelOutput,
+          timing: {
+            captureMs,
+            currentAppMs,
+            modelMs,
+            parseMs,
+            totalMs: elapsed(startedAt),
+          },
+        })
+      }
+      throw caught
+    }
     parseMs += elapsed(parseStartedAt)
   }
 
@@ -489,9 +556,93 @@ export async function runAgentStep({
   }
 }
 
-function parseActionOrError(raw: string, screen: DeviceScreenshot['screen']) {
+function createInvalidModelActionError({
+  error,
+  index,
+  task,
+  session,
+  pendingUserMessages,
+  recalledScreenshot,
+  promptContext,
+  screenshot,
+  currentApp,
+  deviceState,
+  modelOutput,
+  timing,
+}: {
+  error: ActionValidationError
+  index: number
+  task: string
+  session?: AgentSession
+  pendingUserMessages: readonly QueuedUserMessage[]
+  recalledScreenshot?: AgentRecalledScreenshot
+  promptContext: string
+  screenshot: DeviceScreenshot
+  currentApp: string
+  deviceState: DeviceState
+  modelOutput: string
+  timing: AgentTiming
+}) {
+  const invalidAction: AgentAction = { action: 'note', message: INVALID_MODEL_ACTION_MESSAGE }
+  const turn = session
+    ? startThreadTurn(session, {
+        index,
+        task,
+        latestUserMessage: latestUserMessage(session.messages),
+        promptContext,
+        deviceSnapshot: { currentApp, deviceState, screenshot },
+        modelOutput,
+        action: invalidAction,
+        executionAction: invalidAction,
+        preview: INVALID_MODEL_ACTION_PREVIEW,
+        timing,
+      })
+    : undefined
+
+  if (session) {
+    if (recalledScreenshot) {
+      clearThreadActiveScreenshotRecall(session)
+    }
+    recordThreadScreenshot(session, {
+      step: index,
+      title: `Step #${index}`,
+      currentApp,
+      deviceState,
+      screenshot,
+    })
+    markPendingUserMessagesConsumed(session, pendingUserMessages)
+  }
+
+  return new InvalidModelActionError(error.message, {
+    index,
+    turnId: turn?.id,
+    promptContext,
+    screenshot,
+    currentApp,
+    deviceState,
+    modelOutput,
+    action: invalidAction,
+    executionAction: invalidAction,
+    preview: INVALID_MODEL_ACTION_PREVIEW,
+    timing,
+  })
+}
+
+function isRecoverableActionValidationError(error: unknown): error is ActionValidationError {
+  return error instanceof ActionValidationError
+}
+
+function isInvalidModelActionError(error: unknown): error is InvalidModelActionError {
+  return error instanceof InvalidModelActionError
+}
+
+function parseActionOrError(
+  raw: string,
+  screen: DeviceScreenshot['screen'],
+  actionProtocol: ActionProtocol,
+) {
   try {
-    return parseModelAction(raw, screen)
+    return parseModelAction(raw, screen, actionProtocol)
   } catch (caught) {
     return caught instanceof Error ? caught : new Error(String(caught))
   }
@@ -530,17 +681,12 @@ async function completeActionWithEmptyContentRetry(
 }
 
 function emptyContentRetryInstruction(actionProtocol: CompletionRequest['actionProtocol']) {
-  const prefix = [
+  return [
     'The previous model response for this exact screenshot was empty.',
     'Use the screenshot and compact context above, then return exactly one valid',
+    'JSON action object.',
+    retryCoordinateInstructionForActionProtocol(actionProtocol),
   ].join(' ')
-  if (actionProtocol === 'open_autoglm_function') {
-    return `${prefix} Open-AutoGLM <think>...</think><answer>...</answer> action.`
-  }
-  if (actionProtocol === 'mobilerun_xml') {
-    return `${prefix} mobilerun <function_calls>...</function_calls> tool call block.`
-  }
-  return `${prefix} JSON action object.`
 }
 
 function isEmptyAssistantContentError(error: unknown) {
@@ -592,12 +738,40 @@ export function createAgentRunner({
           if (input.signal?.aborted || isAbortError(caught)) {
             return { status: 'stopped', steps }
           }
+          if (isInvalidModelActionError(caught)) {
+            const step = caught.step
+            try {
+              await withAbort(Promise.resolve(input.onStep?.(step)), input.signal)
+            } catch (stepCaught) {
+              if (input.signal?.aborted || isAbortError(stepCaught)) {
+                return { status: 'stopped', steps }
+              }
+              throw stepCaught
+            }
+            recordAgentStep(session, step, caught.message, false, {
+              memoryEnabled: input.memoryEnabled,
+              onMemoryItem: input.onMemoryItem,
+            })
+            steps.push(retainStepForRunResult(step))
+            recoverableExecutionFailures += 1
+            if (recoverableExecutionFailures > MAX_AUTO_RECOVERABLE_EXECUTION_FAILURES) {
+              return { status: 'awaiting_review', steps, reason: caught.message }
+            }
+            continue
+          }
           throw caught
         }
         if (input.signal?.aborted) {
           return { status: 'stopped', steps }
         }
-        input.onStep?.(step)
+        try {
+          await withAbort(Promise.resolve(input.onStep?.(step)), input.signal)
+        } catch (caught) {
+          if (input.signal?.aborted || isAbortError(caught)) {
+            return { status: 'stopped', steps }
+          }
+          throw caught
+        }
         steps.push(retainStepForRunResult(step))
 
         if (step.action.action === 'done') {

@@ -49,6 +49,27 @@ describe('buildScreenshotContext', () => {
       resized: true,
     })
   })
+
+  it('describes normalized 0-1000 coordinate space when requested', () => {
+    expect(
+      buildScreenshotContext({
+        modelScreen: { width: 500, height: 1000 },
+        deviceScreen: { width: 1000, height: 2000 },
+        coordinateMode: 'normalized_0_1000',
+      }),
+    ).toEqual({
+      model_screen_size: '500x1000',
+      device_screen_size: '1000x2000',
+      coordinate_mode: 'normalized_0_1000',
+      coordinate_origin: 'top_left',
+      coordinate_range: '0..1000',
+      grid_divisions: 6,
+      grid_labels: '0_1000_major_lines',
+      execution_mapping:
+        'normalized_coordinates_are_mapped_to_model_screenshot_pixels_then_device_pixels',
+      resized: true,
+    })
+  })
 })
 
 describe('mapActionCoordinates', () => {
@@ -108,6 +129,26 @@ describe('mapActionCoordinates', () => {
     expect(
       mapActionCoordinates({ action: 'double_tap', x: 400, y: 750 }, modelScreen, deviceScreen),
     ).toEqual({ action: 'double_tap', x: 800, y: 1500 })
+  })
+
+  it('clamps mapped touch coordinates to the target screen edge', () => {
+    expect(
+      mapActionCoordinates({ action: 'tap', x: 999, y: 1999 }, deviceScreen, modelScreen),
+    ).toEqual({ action: 'tap', x: 499, y: 999 })
+
+    expect(
+      mapActionCoordinates(
+        { action: 'swipe', fromX: 999, fromY: 1999, toX: 1000, toY: 2000 },
+        deviceScreen,
+        modelScreen,
+      ),
+    ).toEqual({
+      action: 'swipe',
+      fromX: 499,
+      fromY: 999,
+      toX: 499,
+      toY: 999,
+    })
   })
 
   it('leaves non-coordinate actions unchanged', () => {

@@ -1,6 +1,7 @@
 import { Check, ImageOff, Maximize2, Minimize2, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react'
 import {
   useEffect,
+  useId,
   useRef,
   useState,
   type CSSProperties,
@@ -12,13 +13,19 @@ import { buildActionPreview } from '../lib/actionPreview'
 import type { AgentAction } from '../lib/actionTypes'
 import type { AppCopy } from '../lib/appCopy'
 import type { AgentStep } from '../lib/agent'
+import { mapActionCoordinates, modelScreenshotView } from '../lib/screenshot'
+import { AgentCursor } from './AgentCursor'
 import { ScreenshotLightbox, type ScreenshotSource } from './ScreenshotLightbox'
+import type { BusyTask } from '../lib/busyTask'
+import type { CursorPoint } from '../lib/cursorMotion'
 
 export type PhoneStageProps = {
   copy: AppCopy
   displayedScreenshot: ScreenshotSource | null
   onRunInteractiveAction?: (action: AgentAction) => void
   pendingStep: AgentStep | null
+  busyTask?: BusyTask | null
+  runningAgent?: boolean
 }
 
 export function PhoneStage({
@@ -26,6 +33,8 @@ export function PhoneStage({
   displayedScreenshot,
   onRunInteractiveAction,
   pendingStep,
+  busyTask = null,
+  runningAgent = false,
 }: PhoneStageProps) {
   const [draftAction, setDraftAction] = useState<AgentAction | null>(null)
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null)
@@ -38,6 +47,27 @@ export function PhoneStage({
   } | null>(null)
   const hasScreenshot = displayedScreenshot !== null
   const isFullscreenPreview = hasScreenshot && fullscreen
+  const isAgentRunning = busyTask?.id === 'run-agent' || runningAgent
+
+  const cursor: CursorPoint | null = (() => {
+    if (!displayedScreenshot || !isAgentRunning) return null
+    if (!pendingStep) return null
+    const action = pendingStep.executionAction
+    if (action.action === 'tap' || action.action === 'long_press' || action.action === 'double_tap') {
+      const ss = displayedScreenshot.screen
+      const actionX = action.x
+      const actionY = action.y
+      const containerWidth = screenshotButtonSize?.width ?? ss.width
+      const containerHeight = screenshotButtonSize?.height ?? ss.height
+      return {
+        x: (actionX / ss.width) * containerWidth,
+        y: (actionY / ss.height) * containerHeight,
+        visible: true,
+        animateMovement: true,
+      }
+    }
+    return null
+  })()
   const stageLabel = displayedScreenshot ? copy.androidScreenshot : copy.noScreenshot
   const stageClassName = [
     'phone-stage',
@@ -52,6 +82,9 @@ export function PhoneStage({
     displayedScreenshot && screenshotButtonSize
       ? containedImageLayerStyle(displayedScreenshot.screen, screenshotButtonSize)
       : undefined
+  const pendingOverlay = displayedScreenshot
+    ? pendingStepOverlay(pendingStep, displayedScreenshot)
+    : null
 
   useEffect(() => {
     if (!isFullscreenPreview) {
@@ -123,8 +156,8 @@ export function PhoneStage({
     const xRatio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0
     const yRatio = rect.height > 0 ? (event.clientY - rect.top) / rect.height : 0
     return {
-      x: Math.round(clamp(xRatio, 0, 1) * displayedScreenshot.screen.width),
-      y: Math.round(clamp(yRatio, 0, 1) * displayedScreenshot.screen.height),
+      x: screenCoordinateFromRatio(xRatio, displayedScreenshot.screen.width),
+      y: screenCoordinateFromRatio(yRatio, displayedScreenshot.screen.height),
     }
   }
 
@@ -209,11 +242,19 @@ export function PhoneStage({
                     ref={screenshotLayerRef}
                     style={screenshotLayerStyle}
                   >
-                    {pendingStep ? (
-                      <ActionOverlay action={pendingStep.action} screen={displayedScreenshot.screen} />
+                    {pendingOverlay ? (
+                      <ActionOverlay
+                        action={pendingOverlay.action}
+                        screen={displayedScreenshot.screen}
+                        title={pendingOverlay.title}
+                      />
                     ) : null}
                     {draftAction ? (
-                      <ActionOverlay action={draftAction} screen={displayedScreenshot.screen} />
+                      <ActionOverlay
+                        action={draftAction}
+                        screen={displayedScreenshot.screen}
+                        title={buildActionPreview(draftAction)}
+                      />
                     ) : null}
                     {onRunInteractiveAction ? (
                       <span
@@ -227,6 +268,13 @@ export function PhoneStage({
                         onMouseDown={startInteraction}
                         onMouseLeave={() => setDragStart(null)}
                         onMouseUp={finishInteraction}
+                      />
+                    ) : null}
+                    {cursor && screenshotButtonSize ? (
+                      <AgentCursor
+                        cursor={cursor}
+                        isVisible={true}
+                        viewportSize={screenshotButtonSize}
                       />
                     ) : null}
                   </span>
@@ -320,6 +368,11 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
+function screenCoordinateFromRatio(ratio: number, axisSize: number) {
+  const maxCoordinate = Math.max(0, axisSize - 1)
+  return clamp(Math.round(clamp(ratio, 0, 1) * axisSize), 0, maxCoordinate)
+}
+
 function containedImageLayerStyle(
   screen: { width: number; height: number },
   container: { width: number; height: number },
@@ -366,13 +419,45 @@ function percent(value: number) {
 type ActionOverlayProps = {
   action: AgentAction
   screen: { width: number; height: number }
+  title?: string
 }
 
-function ActionOverlay({ action, screen }: ActionOverlayProps) {
+function pendingStepOverlay(
+  pendingStep: AgentStep | null,
+  displayedScreenshot: ScreenshotSource,
+): { action: AgentAction; title: string } | null {
+  if (!pendingStep) {
+    return null
+  }
+
+  const pendingView = modelScreenshotView(pendingStep.screenshot)
+  if (
+    pendingView.dataUrl !== displayedScreenshot.dataUrl ||
+    pendingView.screen.width !== displayedScreenshot.screen.width ||
+    pendingView.screen.height !== displayedScreenshot.screen.height
+  ) {
+    return null
+  }
+
+  return {
+    action: mapActionCoordinates(
+      pendingStep.executionAction,
+      pendingStep.screenshot.screen,
+      displayedScreenshot.screen,
+    ),
+    title: buildActionPreview(pendingStep.executionAction),
+  }
+}
+
+function ActionOverlay({ action, screen, title }: ActionOverlayProps) {
+  const rawSwipeMarkerId = useId()
+  const swipeMarkerId = `swipe-arrow-${rawSwipeMarkerId.replace(/:/g, '')}`
+
   if (action.action === 'tap' || action.action === 'long_press' || action.action === 'double_tap') {
     return (
       <span
         className={`tap-marker ${action.action}`}
+        title={title}
         style={{
           left: `${(action.x / screen.width) * 100}%`,
           top: `${(action.y / screen.height) * 100}%`,
@@ -382,10 +467,47 @@ function ActionOverlay({ action, screen }: ActionOverlayProps) {
   }
 
   if (action.action === 'swipe') {
+    const durationMs = action.durationMs ?? DEFAULT_SWIPE_DURATION_MS
+    const labelPosition = swipeLabelPosition(action, screen)
+
     return (
       <>
+        <svg
+          aria-label={`Swipe path ${durationMs} ms`}
+          className="swipe-path"
+          preserveAspectRatio="none"
+          role="img"
+          viewBox={`0 0 ${screen.width} ${screen.height}`}
+        >
+          {title ? <title>{title}</title> : null}
+          <defs>
+            <marker
+              id={swipeMarkerId}
+              markerHeight="8"
+              markerWidth="8"
+              orient="auto"
+              refX="7"
+              refY="4"
+              viewBox="0 0 8 8"
+            >
+              <path className="swipe-path-arrowhead" d="M 0 0 L 8 4 L 0 8 z" />
+            </marker>
+          </defs>
+          <line
+            className="swipe-path-line"
+            markerEnd={`url(#${swipeMarkerId})`}
+            x1={action.fromX}
+            x2={action.toX}
+            y1={action.fromY}
+            y2={action.toY}
+          />
+        </svg>
+        <span className="swipe-duration-label" style={labelPosition}>
+          {durationMs} ms
+        </span>
         <span
           className="swipe-marker start"
+          title={title}
           style={{
             left: `${(action.fromX / screen.width) * 100}%`,
             top: `${(action.fromY / screen.height) * 100}%`,
@@ -393,6 +515,7 @@ function ActionOverlay({ action, screen }: ActionOverlayProps) {
         />
         <span
           className="swipe-marker end"
+          title={title}
           style={{
             left: `${(action.toX / screen.width) * 100}%`,
             top: `${(action.toY / screen.height) * 100}%`,
@@ -403,4 +526,14 @@ function ActionOverlay({ action, screen }: ActionOverlayProps) {
   }
 
   return null
+}
+
+function swipeLabelPosition(
+  action: Extract<AgentAction, { action: 'swipe' }>,
+  screen: { width: number; height: number },
+): CSSProperties {
+  return {
+    left: `${(((action.fromX + action.toX) / 2) / screen.width) * 100}%`,
+    top: `${(((action.fromY + action.toY) / 2) / screen.height) * 100}%`,
+  }
 }

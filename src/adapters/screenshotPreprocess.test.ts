@@ -109,4 +109,45 @@ describe('preprocessScreenshotForModel', () => {
       modelGridDivisions: 6,
     })
   })
+
+  it('draws normalized 0-1000 grid labels when requested', async () => {
+    globalThis.Image = FakeImage as unknown as typeof Image
+    const canvas = document.createElement('canvas')
+    Object.defineProperty(canvas, 'toBlob', { configurable: true, value: undefined })
+    const context = {
+      beginPath: vi.fn(),
+      drawImage: vi.fn(),
+      fillRect: vi.fn(),
+      fillText: vi.fn(),
+      lineTo: vi.fn(),
+      measureText: vi.fn(() => ({ width: 36 }) as TextMetrics),
+      moveTo: vi.fn(),
+      restore: vi.fn(),
+      save: vi.fn(),
+      stroke: vi.fn(),
+      set fillStyle(_value: string) {},
+      set font(_value: string) {},
+      set imageSmoothingEnabled(_value: boolean) {},
+      set imageSmoothingQuality(_value: ImageSmoothingQuality) {},
+      set lineWidth(_value: number) {},
+      set strokeStyle(_value: string) {},
+      set textBaseline(_value: CanvasTextBaseline) {},
+    } as unknown as CanvasRenderingContext2D
+    vi.spyOn(document, 'createElement').mockReturnValue(canvas)
+    vi.spyOn(canvas, 'getContext').mockReturnValue(context)
+    vi.spyOn(canvas, 'toDataURL').mockReturnValue('data:image/jpeg;base64,compressed')
+
+    await preprocessScreenshotForModel({
+      dataUrl: 'data:image/png;base64,raw',
+      screen: { width: 1000, height: 1000 },
+      coordinateMode: 'normalized_0_1000',
+    })
+
+    const labels = vi
+      .mocked(context.fillText)
+      .mock.calls
+      .map(([label]) => label)
+    expect(labels).toEqual(expect.arrayContaining(['x=0', 'x=500', 'x=1000']))
+    expect(labels).toEqual(expect.arrayContaining(['y=0', 'y=500', 'y=1000']))
+  })
 })

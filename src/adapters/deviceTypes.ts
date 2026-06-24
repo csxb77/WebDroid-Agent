@@ -1,4 +1,5 @@
 import type { AgentAction, ScreenSize } from '../lib/actionTypes'
+import type { ActionCoordinateMode } from '../lib/actionProtocol'
 import type { DeviceScreenTree } from './uiAutomator'
 
 export type { DeviceScreenTree } from './uiAutomator'
@@ -15,6 +16,10 @@ export type DeviceScreenshot = {
   modelDataUrl?: string
   modelScreen?: ScreenSize
   modelGridDivisions?: number
+}
+
+export type DeviceScreenshotOptions = {
+  coordinateMode?: ActionCoordinateMode
 }
 
 export type DeviceState = {
@@ -57,7 +62,7 @@ export type DeviceRetryOptions = {
 export type DeviceBackend = {
   connect(): Promise<DeviceInfo>
   disconnect(): Promise<void>
-  screenshot(): Promise<DeviceScreenshot>
+  screenshot(options?: DeviceScreenshotOptions): Promise<DeviceScreenshot>
   getCurrentApp(): Promise<string>
   getDeviceState(): Promise<DeviceState>
   getScreenTree?(): Promise<DeviceScreenTree>

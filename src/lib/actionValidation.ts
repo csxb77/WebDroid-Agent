@@ -1,9 +1,14 @@
 import {
   canonicalActionName,
   isSupportedKey,
-  normalizeActionName,
   normalizeKey,
 } from './actionAliases'
+import type { ActionCoordinateMode } from './actionProtocol'
+import {
+  readPointCoordinates,
+  readSwipeCoordinates,
+  type ActionCoordinateReader,
+} from './actionCoordinates'
 import { ActionValidationError } from './actionTypes'
 import type {
   AgentAction,
@@ -16,15 +21,23 @@ const MAX_SEQUENCE_ACTIONS = 8
 const MAX_REPEAT_COUNT = 10
 const MAX_REPEAT_DELAY_MS = 5000
 const MAX_COMPOSITE_ACTION_DEPTH = 1
+export type ActionValidationOptions = {
+  coordinateMode?: ActionCoordinateMode
+}
 
-export function validateAction(candidate: unknown, screen?: ScreenSize): AgentAction {
-  return validateActionAtDepth(candidate, screen, 0)
+export function validateAction(
+  candidate: unknown,
+  screen?: ScreenSize,
+  options: ActionValidationOptions = {},
+): AgentAction {
+  return validateActionAtDepth(candidate, screen, 0, options.coordinateMode ?? 'screenshot_pixels')
 }
 
 function validateActionAtDepth(
   candidate: unknown,
   screen: ScreenSize | undefined,
   depth: number,
+  coordinateMode: ActionCoordinateMode,
 ): AgentAction {
   if (!isRecord(candidate)) {
     throw new ActionValidationError('Action must be a JSON object.')
@@ -34,61 +47,44 @@ function validateActionAtDepth(
     throw new ActionValidationError('Action must include an action name.')
   }
 
-  const rawAction = normalizeActionName(candidate.action)
   const action = canonicalActionName(candidate.action)
 
   switch (action) {
     case 'launch': {
-      const app = readFirstString(candidate, [
-        'app',
-        'appName',
-        'name',
-        'package',
-        'packageName',
-        'package_name',
-        'text',
-        'app_id',
-        'bundle_id',
-      ])
-      const packageName =
-        optionalString(candidate, 'packageName') ??
-        optionalString(candidate, 'package_name') ??
-        optionalString(candidate, 'app_id') ??
-        optionalString(candidate, 'bundle_id') ??
-        optionalPackageNameFromApp(app)
+      const app = readFirstString(candidate, ['app'])
+      const packageName = optionalString(candidate, 'packageName') ?? optionalPackageNameFromApp(app)
       return withReason(packageName ? { action, app, packageName } : { action, app }, candidate)
     }
     case 'tap': {
-      const { x, y } = readPoint(candidate, screen)
+      const { x, y } = readPoint(candidate, screen, coordinateMode)
       assertPointWithinScreen(x, y, screen)
       return withTapMetadata({ action, x, y }, candidate)
     }
     case 'swipe': {
-      const { fromX, fromY, toX, toY } = readSwipePoints(candidate, screen)
+      const { fromX, fromY, toX, toY } = readSwipePoints(candidate, screen, coordinateMode)
       assertPointWithinScreen(fromX, fromY, screen)
       assertPointWithinScreen(toX, toY, screen)
-      const defaultDurationMs = 'coordinate' in candidate && 'coordinate2' in candidate ? 1000 : 400
-      const durationMs = readSwipeDurationMs(candidate, defaultDurationMs)
+      const durationMs = readSwipeDurationMs(candidate, 400)
       return withReason({ action, fromX, fromY, toX, toY, durationMs }, candidate)
     }
     case 'input_text': {
-      const text = readFirstString(candidate, ['text', 'content', 'input', 'value'])
+      const text = readFirstString(candidate, ['text'])
       if (hasControlCharacters(text)) {
         throw new ActionValidationError('input_text cannot contain control characters.')
       }
       if (text.length > 500) {
         throw new ActionValidationError('input_text is limited to 500 characters.')
       }
-      const clear = readOptionalBoolean(candidate, ['clear', 'clearFirst', 'replace']) ?? false
+      const clear = readOptionalBoolean(candidate, ['clear']) ?? false
       return withReason(clear ? { action, text, clear } : { action, text }, candidate)
     }
     case 'type_secret': {
-      const secretId = readFirstString(candidate, ['secretId', 'secret_id', 'id'])
-      const clear = readOptionalBoolean(candidate, ['clear', 'clearFirst', 'replace']) ?? false
+      const secretId = readFirstString(candidate, ['secretId'])
+      const clear = readOptionalBoolean(candidate, ['clear']) ?? false
       return withReason(clear ? { action, secretId, clear } : { action, secretId }, candidate)
     }
     case 'open_url': {
-      const url = readFirstString(candidate, ['url', 'uri', 'deepLink', 'deep_link', 'link', 'text'])
+      const url = readFirstString(candidate, ['url'])
       if (hasControlCharacters(url)) {
         throw new ActionValidationError('open_url cannot contain control characters.')
       }
@@ -101,7 +97,7 @@ function validateActionAtDepth(
       return withReason({ action, url }, candidate)
     }
     case 'set_clipboard': {
-      const text = readFirstString(candidate, ['text', 'content', 'value'])
+      const text = readFirstString(candidate, ['text'])
       if (hasNullCharacter(text)) {
         throw new ActionValidationError('set_clipboard cannot contain null characters.')
       }
@@ -113,7 +109,7 @@ function validateActionAtDepth(
     case 'paste':
       return withReason({ action }, candidate)
     case 'key': {
-      const key = normalizeKey(readFirstString(candidate, ['key', 'button']))
+      const key = normalizeKey(readFirstString(candidate, ['key']))
       if (!isSupportedKey(key)) {
         throw new ActionValidationError(`Unsupported key "${key}".`)
       }
@@ -124,14 +120,13 @@ function validateActionAtDepth(
     case 'home':
       return withReason({ action }, candidate)
     case 'long_press': {
-      const { x, y } = readPoint(candidate, screen)
+      const { x, y } = readPoint(candidate, screen, coordinateMode)
       assertPointWithinScreen(x, y, screen)
-      const defaultDurationMs = rawAction === 'long_press_at' ? 1000 : 800
-      const durationMs = readLongPressDurationMs(candidate, defaultDurationMs)
+      const durationMs = readLongPressDurationMs(candidate, 800)
       return withReason({ action, x, y, durationMs }, candidate)
     }
     case 'double_tap': {
-      const { x, y } = readPoint(candidate, screen)
+      const { x, y } = readPoint(candidate, screen, coordinateMode)
       assertPointWithinScreen(x, y, screen)
       return withReason({ action, x, y }, candidate)
     }
@@ -147,12 +142,7 @@ function validateActionAtDepth(
       return withReason({ action, message }, candidate)
     }
     case 'note': {
-      const message =
-        optionalString(candidate, 'message') ??
-        optionalString(candidate, 'content') ??
-        optionalString(candidate, 'text') ??
-        optionalString(candidate, 'information') ??
-        'Observation noted.'
+      const message = optionalString(candidate, 'message') ?? 'Observation noted.'
       return withReason({ action, message }, candidate)
     }
     case 'interact': {
@@ -175,7 +165,7 @@ function validateActionAtDepth(
       )
     }
     case 'custom_tool': {
-      const tool = readFirstString(candidate, ['tool', 'toolName', 'tool_name', 'name'])
+      const tool = readFirstString(candidate, ['tool'])
       const input = readCustomToolInput(candidate)
       return withReason(
         input === undefined ? { action, tool } : { action, tool, input },
@@ -183,15 +173,8 @@ function validateActionAtDepth(
       )
     }
     case 'view_screenshot': {
-      const ref =
-        optionalString(candidate, 'ref') ??
-        optionalString(candidate, 'id') ??
-        optionalString(candidate, 'logId') ??
-        optionalString(candidate, 'log_id') ??
-        optionalString(candidate, 'screenshot') ??
-        optionalString(candidate, 'screenshotRef') ??
-        optionalString(candidate, 'screenshot_ref')
-      const step = readOptionalPositiveInteger(candidate, ['step', 'logStep', 'log_step'])
+      const ref = optionalString(candidate, 'ref')
+      const step = readOptionalPositiveInteger(candidate, ['step'])
 
       if (!ref && step === undefined) {
         throw new ActionValidationError('view_screenshot must include a ref or step.')
@@ -208,12 +191,12 @@ function validateActionAtDepth(
     }
     case 'sequence': {
       assertCompositeActionDepth(depth)
-      const actions = readActionList(candidate, screen, depth)
+      const actions = readActionList(candidate, screen, depth, coordinateMode)
       return withReason({ action, actions }, candidate)
     }
     case 'repeat': {
       assertCompositeActionDepth(depth)
-      const actionToRepeat = readRepeatAction(candidate, screen, depth)
+      const actionToRepeat = readRepeatAction(candidate, screen, depth, coordinateMode)
       const count = readRepeatCount(candidate)
       const delayMs = readOptionalDelayMs(candidate)
       return withReason(
@@ -317,16 +300,7 @@ function readDurationSeconds(record: Record<string, unknown>, key: string): numb
 }
 
 function readCompletionSummary(record: Record<string, unknown>) {
-  const summary =
-    optionalString(record, 'summary') ??
-    optionalString(record, 'message') ??
-    optionalString(record, 'reason')
-  const success = readOptionalBoolean(record, ['success'])
-
-  if (success === false && summary) {
-    return `Failed: ${summary}`
-  }
-  return summary
+  return optionalString(record, 'summary')
 }
 
 function readFirstString(record: Record<string, unknown>, keys: readonly string[]): string {
@@ -366,8 +340,9 @@ function readActionList(
   record: Record<string, unknown>,
   screen: ScreenSize | undefined,
   depth: number,
+  coordinateMode: ActionCoordinateMode,
 ) {
-  const value = record.actions ?? record.steps ?? record.sequence
+  const value = record.actions
   if (!Array.isArray(value)) {
     throw new ActionValidationError('sequence actions must be an array.')
   }
@@ -378,29 +353,24 @@ function readActionList(
     throw new ActionValidationError(`sequence is limited to ${MAX_SEQUENCE_ACTIONS} actions.`)
   }
 
-  return value.map((item) => validateCompositeChildAction(item, screen, depth))
+  return value.map((item) => validateCompositeChildAction(item, screen, depth, coordinateMode))
 }
 
 function readRepeatAction(
   record: Record<string, unknown>,
   screen: ScreenSize | undefined,
   depth: number,
+  coordinateMode: ActionCoordinateMode,
 ) {
-  const value =
-    record.actionToRepeat ??
-    record.action_to_repeat ??
-    record.step ??
-    record.toolAction ??
-    record.tool_action ??
-    record.tool
+  const value = record.actionToRepeat
   if (value === undefined) {
     throw new ActionValidationError('repeat must include actionToRepeat.')
   }
-  return validateCompositeChildAction(value, screen, depth)
+  return validateCompositeChildAction(value, screen, depth, coordinateMode)
 }
 
 function readRepeatCount(record: Record<string, unknown>) {
-  const raw = record.count ?? record.times ?? record.repeat
+  const raw = record.count
   if (!Number.isInteger(raw)) {
     throw new ActionValidationError('repeat count must be an integer.')
   }
@@ -416,12 +386,6 @@ function readOptionalDelayMs(record: Record<string, unknown>) {
   if ('delayMs' in record) {
     return clamp(Math.round(readFiniteNumber(record, 'delayMs')), 0, MAX_REPEAT_DELAY_MS)
   }
-  if ('delay_ms' in record) {
-    return clamp(Math.round(readFiniteNumber(record, 'delay_ms')), 0, MAX_REPEAT_DELAY_MS)
-  }
-  if ('delay' in record) {
-    return clamp(Math.round(readDurationSeconds(record, 'delay') * 1000), 0, MAX_REPEAT_DELAY_MS)
-  }
   return undefined
 }
 
@@ -429,8 +393,9 @@ function validateCompositeChildAction(
   candidate: unknown,
   screen: ScreenSize | undefined,
   depth: number,
+  coordinateMode: ActionCoordinateMode,
 ) {
-  const action = validateActionAtDepth(candidate, screen, depth + 1)
+  const action = validateActionAtDepth(candidate, screen, depth + 1, coordinateMode)
   if (!isCompositeChildAction(action)) {
     throw new ActionValidationError(`"${action.action}" cannot be used inside a composite action.`)
   }
@@ -461,7 +426,7 @@ function optionalString(record: Record<string, unknown>, key: string): string | 
 }
 
 function withReason<T extends AgentAction>(action: T, source: Record<string, unknown>): T {
-  const reason = optionalString(source, 'reason') ?? optionalString(source, 'thought')
+  const reason = optionalString(source, 'reason')
   if (!reason) {
     return action
   }
@@ -489,35 +454,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function readPoint(record: Record<string, unknown>, screen?: ScreenSize): { x: number; y: number } {
-  if ('x' in record && 'y' in record) {
-    return {
-      x: readInteger(record, 'x'),
-      y: readInteger(record, 'y'),
-    }
-  }
-
-  const areaCenter = readAreaCenter(record)
-  if (areaCenter) {
-    return tupleToScreenPoint(areaCenter)
-  }
-
-  const element = readNumberTuple(record.element)
-  if (element) {
-    return relativePointToScreen(element, screen)
-  }
-
-  const point =
-    readNumberTuple(record.point) ??
-    readNumberTuple(record.position) ??
-    readNumberTuple(record.coordinate) ??
-    readNumberTuple(record.coordinates)
-
-  if (!point) {
-    throw new ActionValidationError('Action must include x/y or element coordinates.')
-  }
-
-  return tupleToScreenPoint(point)
+function readPoint(
+  record: Record<string, unknown>,
+  screen: ScreenSize | undefined,
+  coordinateMode: ActionCoordinateMode,
+): { x: number; y: number } {
+  return readPointCoordinates(record, screen, coordinateMode, coordinateReaderForMode(coordinateMode))
 }
 
 function readOptionalPositiveInteger(record: Record<string, unknown>, keys: readonly string[]) {
@@ -542,149 +484,21 @@ function readOptionalPositiveInteger(record: Record<string, unknown>, keys: read
 
 function readSwipePoints(
   record: Record<string, unknown>,
-  screen?: ScreenSize,
+  screen: ScreenSize | undefined,
+  coordinateMode: ActionCoordinateMode,
 ): { fromX: number; fromY: number; toX: number; toY: number } {
-  if ('fromX' in record && 'fromY' in record && 'toX' in record && 'toY' in record) {
-    return {
-      fromX: readInteger(record, 'fromX'),
-      fromY: readInteger(record, 'fromY'),
-      toX: readInteger(record, 'toX'),
-      toY: readInteger(record, 'toY'),
-    }
-  }
-
-  const start =
-    readNumberTuple(record.coordinate) ??
-    readNumberTuple(record.start) ??
-    readNumberTuple(record.from) ??
-    readNumberTuple(record.startPoint) ??
-    readNumberTuple(record.start_point)
-  const end =
-    readNumberTuple(record.coordinate2) ??
-    readNumberTuple(record.end) ??
-    readNumberTuple(record.to) ??
-    readNumberTuple(record.endPoint) ??
-    readNumberTuple(record.end_point)
-
-  if (start && end) {
-    const from = tupleToScreenPoint(start)
-    const to = tupleToScreenPoint(end)
-    return {
-      fromX: from.x,
-      fromY: from.y,
-      toX: to.x,
-      toY: to.y,
-    }
-  }
-
-  const direction = optionalString(record, 'direction')?.toLowerCase()
-  if (!direction || !screen) {
-    throw new ActionValidationError('Swipe must include start/end coordinates or a direction.')
-  }
-
-  const centerX = Math.round(screen.width / 2)
-  const centerY = Math.round(screen.height / 2)
-  const lowX = Math.round(screen.width * 0.25)
-  const highX = Math.round(screen.width * 0.75)
-  const lowY = Math.round(screen.height * 0.25)
-  const highY = Math.round(screen.height * 0.75)
-
-  if (direction === 'up') {
-    return { fromX: centerX, fromY: highY, toX: centerX, toY: lowY }
-  }
-  if (direction === 'down') {
-    return { fromX: centerX, fromY: lowY, toX: centerX, toY: highY }
-  }
-  if (direction === 'left') {
-    return { fromX: highX, fromY: centerY, toX: lowX, toY: centerY }
-  }
-  if (direction === 'right') {
-    return { fromX: lowX, fromY: centerY, toX: highX, toY: centerY }
-  }
-
-  throw new ActionValidationError(`Unsupported swipe direction "${direction}".`)
+  return readSwipeCoordinates(record, screen, coordinateMode, coordinateReaderForMode(coordinateMode))
 }
 
-function readNumberTuple(value: unknown): [number, number] | null {
-  if (!Array.isArray(value) || value.length < 2) {
-    return null
-  }
-
-  const [x, y] = value
-  if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) {
-    return null
-  }
-
-  return [x, y]
-}
-
-function readAreaCenter(record: Record<string, unknown>): [number, number] | null {
-  if ('x1' in record && 'y1' in record && 'x2' in record && 'y2' in record) {
-    return [
-      Math.round((readInteger(record, 'x1') + readInteger(record, 'x2')) / 2),
-      Math.round((readInteger(record, 'y1') + readInteger(record, 'y2')) / 2),
-    ]
-  }
-
-  const area = readNumberTuple4(record.area) ?? readNumberTuple4(record.bounds)
-  if (!area) {
-    return null
-  }
-
-  return [Math.round((area[0] + area[2]) / 2), Math.round((area[1] + area[3]) / 2)]
-}
-
-function readNumberTuple4(value: unknown): [number, number, number, number] | null {
-  if (!Array.isArray(value) || value.length < 4) {
-    return null
-  }
-
-  const [x1, y1, x2, y2] = value
-  if (
-    typeof x1 !== 'number' ||
-    typeof y1 !== 'number' ||
-    typeof x2 !== 'number' ||
-    typeof y2 !== 'number' ||
-    !Number.isFinite(x1) ||
-    !Number.isFinite(y1) ||
-    !Number.isFinite(x2) ||
-    !Number.isFinite(y2)
-  ) {
-    return null
-  }
-
-  return [x1, y1, x2, y2]
+function coordinateReaderForMode(coordinateMode: ActionCoordinateMode): ActionCoordinateReader {
+  return coordinateMode === 'screenshot_pixels' ? readInteger : readFiniteNumber
 }
 
 function readCustomToolInput(record: Record<string, unknown>) {
   if ('input' in record) {
     return record.input
   }
-  if ('arguments' in record) {
-    return record.arguments
-  }
-  if ('args' in record) {
-    return record.args
-  }
-  if ('parameters' in record) {
-    return record.parameters
-  }
   return undefined
-}
-
-function tupleToScreenPoint([x, y]: [number, number]) {
-  return { x: Math.round(x), y: Math.round(y) }
-}
-
-function relativePointToScreen([x, y]: [number, number], screen?: ScreenSize): { x: number; y: number } {
-  if (!screen) {
-    return { x: Math.round(x), y: Math.round(y) }
-  }
-
-  return {
-    x: Math.round((x / 1000) * screen.width),
-    y: Math.round((y / 1000) * screen.height),
-  }
 }
 
 function optionalPackageNameFromApp(app: string): string | undefined {

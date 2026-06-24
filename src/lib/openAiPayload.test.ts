@@ -5,6 +5,25 @@ import {
   buildFinalResponsePayload,
 } from './openAiPayload'
 
+type ActionPayload = ReturnType<typeof buildChatCompletionPayload>
+
+function userMultimodalContent(payload: ActionPayload, messageIndex = 1) {
+  const message = payload.messages[messageIndex]
+  if (message.role !== 'user' || !Array.isArray(message.content)) {
+    throw new Error('Expected multimodal user message.')
+  }
+  return message.content
+}
+
+function firstUserText(payload: ActionPayload, messageIndex = 1) {
+  const content = userMultimodalContent(payload, messageIndex)
+  const first = content[0]
+  if (first?.type !== 'text') {
+    throw new Error('Expected first user content item to be text.')
+  }
+  return first.text
+}
+
 describe('buildChatCompletionPayload', () => {
   it('builds an OpenAI-compatible multimodal request', () => {
     const payload = buildChatCompletionPayload({
@@ -49,12 +68,7 @@ describe('buildChatCompletionPayload', () => {
       screen: { width: 1080, height: 2400 },
     })
 
-    const userMessage = payload.messages[1]
-    if (userMessage.role !== 'user' || !Array.isArray(userMessage.content)) {
-      throw new Error('Expected multimodal user message.')
-    }
-
-    expect(userMessage.content).toEqual([
+    expect(userMultimodalContent(payload)).toEqual([
       {
         type: 'text',
         text: expect.stringContaining('Compare screens'),
@@ -74,7 +88,7 @@ describe('buildChatCompletionPayload', () => {
     ])
   })
 
-  it('asks the model for canonical JSON instead of Open-AutoGLM actions', () => {
+  it('asks the model for canonical JSON actions only', () => {
     const payload = buildChatCompletionPayload({
       model: 'agent-model',
       task: 'Open settings',
@@ -86,45 +100,12 @@ describe('buildChatCompletionPayload', () => {
     expect(payload.messages[0].content).toContain('"clear":boolean')
     expect(payload.messages[0].content).toContain('"action":"wait","duration":number')
     expect(payload.messages[0].content).toContain('"action":"view_screenshot"')
-    expect(payload.messages[0].content).toContain('Mobilerun-compatible aliases')
     expect(payload.messages[0].content).not.toContain('"action":"interact"')
     expect(payload.messages[0].content).not.toContain('"action":"call_api"')
     expect(payload.messages[0].content).not.toContain('Open-AutoGLM')
+    expect(payload.messages[0].content).not.toContain('mobilerun')
+    expect(payload.messages[0].content).not.toContain('<function_calls>')
     expect(payload.messages[0].content).not.toContain('do(action=')
-  })
-
-  it('can ask for Open-AutoGLM function actions explicitly', () => {
-    const payload = buildChatCompletionPayload({
-      actionProtocol: 'open_autoglm_function',
-      model: 'agent-model',
-      task: 'Open settings',
-      screenshotDataUrl: 'data:image/png;base64,abc123',
-      screen: { width: 1080, height: 2400 },
-    })
-
-    expect(payload.response_format).toBeUndefined()
-    expect(payload.messages[0].content).toContain('<think>{short reason}</think>')
-    expect(payload.messages[0].content).toContain('do(action="Tap"')
-    expect(payload.messages[0].content).toContain('type_secret(secret_id=')
-    expect(payload.messages[0].content).toContain('custom_tool(tool=')
-    expect(payload.messages[0].content).toContain('view_screenshot(ref=')
-    expect(payload.messages[0].content).toContain('0-1000 relative coordinate space')
-  })
-
-  it('can ask for mobilerun XML tool calls explicitly', () => {
-    const payload = buildChatCompletionPayload({
-      actionProtocol: 'mobilerun_xml',
-      model: 'agent-model',
-      task: 'Open settings',
-      screenshotDataUrl: 'data:image/png;base64,abc123',
-      screen: { width: 1080, height: 2400 },
-    })
-
-    expect(payload.response_format).toBeUndefined()
-    expect(payload.messages[0].content).toContain('<function_calls>')
-    expect(payload.messages[0].content).toContain('type_secret(secret_id,clear)')
-    expect(payload.messages[0].content).toContain('custom_tool(tool,input)')
-    expect(payload.messages[0].content).toContain('view_screenshot(ref,step)')
   })
 
   it('instructs the model not to request takeover in unrestricted mode', () => {
@@ -151,18 +132,11 @@ describe('buildChatCompletionPayload', () => {
     })
 
     expect(payload.messages[0].content).toContain('Memory is disabled')
-    expect(payload.messages[0].content).not.toContain('Use note/remember to store short durable facts')
+    expect(payload.messages[0].content).not.toContain('Use note to store short durable facts')
 
-    const userMessage = payload.messages[1]
-    if (
-      userMessage.role !== 'user' ||
-      !Array.isArray(userMessage.content) ||
-      userMessage.content[0].type !== 'text'
-    ) {
-      throw new Error('Expected first user content item to be text.')
-    }
-    expect(userMessage.content[0].text).not.toContain('Durable memory:')
-    expect(userMessage.content[0].text).not.toContain('Use the work account.')
+    const userText = firstUserText(payload)
+    expect(userText).not.toContain('Durable memory:')
+    expect(userText).not.toContain('Use the work account.')
   })
 
   it('includes memory instructions and durable memory when enabled', () => {
@@ -175,18 +149,11 @@ describe('buildChatCompletionPayload', () => {
       memoryItems: ['Use the work account.'],
     })
 
-    expect(payload.messages[0].content).toContain('Use note/remember to store short durable facts')
+    expect(payload.messages[0].content).toContain('Use note to store short durable facts')
 
-    const userMessage = payload.messages[1]
-    if (
-      userMessage.role !== 'user' ||
-      !Array.isArray(userMessage.content) ||
-      userMessage.content[0].type !== 'text'
-    ) {
-      throw new Error('Expected first user content item to be text.')
-    }
-    expect(userMessage.content[0].text).toContain('Durable memory:')
-    expect(userMessage.content[0].text).toContain('- Use the work account.')
+    const userText = firstUserText(payload)
+    expect(userText).toContain('Durable memory:')
+    expect(userText).toContain('- Use the work account.')
   })
 
   it('describes screenshot coordinates and device mapping in the user context', () => {
@@ -198,22 +165,33 @@ describe('buildChatCompletionPayload', () => {
       deviceScreen: { width: 1080, height: 2316 },
     })
 
-    const userMessage = payload.messages[1]
-    if (
-      userMessage.role !== 'user' ||
-      !Array.isArray(userMessage.content) ||
-      userMessage.content[0].type !== 'text'
-    ) {
-      throw new Error('Expected first user content item to be text.')
-    }
-
-    const userText = userMessage.content[0].text
+    const userText = firstUserText(payload)
     expect(userText).toContain('"model_screen_size":"955x2048"')
     expect(userText).toContain('"device_screen_size":"1080x2316"')
     expect(userText).toContain('"coordinate_mode":"screenshot_pixels"')
     expect(userText).toContain('"grid_divisions":10')
     expect(userText).toContain('major_lines_only')
     expect(userText).toContain('mapped back to native device pixels')
+  })
+
+  it('uses JSON response format and normalized coordinate instructions for normalized JSON protocol', () => {
+    const payload = buildChatCompletionPayload({
+      model: 'agent-model',
+      actionProtocol: 'webdroid_normalized_json',
+      task: 'Tap center',
+      screenshotDataUrl: 'data:image/png;base64,abc123',
+      screen: { width: 500, height: 1000 },
+      deviceScreen: { width: 1000, height: 2000 },
+    })
+
+    expect(payload.response_format).toEqual({ type: 'json_object' })
+    expect(payload.messages[0].content).toContain('0-1000 normalized coordinates')
+    expect(payload.messages[0].content).toContain('Vision-Pointer')
+
+    const userText = firstUserText(payload)
+    expect(userText).toContain('"coordinate_mode":"normalized_0_1000"')
+    expect(userText).toContain('"coordinate_range":"0..1000"')
+    expect(userText).toMatch(/normalized coordinates are mapped/i)
   })
 
   it('includes current app and previous step history in the user context', () => {
@@ -242,14 +220,7 @@ describe('buildChatCompletionPayload', () => {
 
     const userMessage = payload.messages[1]
     expect(userMessage.role).toBe('user')
-    if (
-      userMessage.role !== 'user' ||
-      !Array.isArray(userMessage.content) ||
-      userMessage.content[0].type !== 'text'
-    ) {
-      throw new Error('Expected first user content item to be text.')
-    }
-    const userText = userMessage.content[0].text
+    const userText = firstUserText(payload)
     expect(userText).toContain('"current_app":"Chrome"')
     expect(userText).toContain('"package_name":"com.android.chrome"')
     expect(userText).toContain('"activity":"com.google.android.apps.chrome.Main"')
@@ -273,18 +244,10 @@ describe('buildChatCompletionPayload', () => {
       appCard: '# Chrome App Card\n- Use the address bar for searches.',
     })
 
-    const userMessage = payload.messages[1]
-    if (
-      userMessage.role !== 'user' ||
-      !Array.isArray(userMessage.content) ||
-      userMessage.content[0].type !== 'text'
-    ) {
-      throw new Error('Expected first user content item to be text.')
-    }
-
-    expect(userMessage.content[0].text).toContain('<app_card>')
-    expect(userMessage.content[0].text).toContain('Chrome App Card')
-    expect(userMessage.content[0].text).toContain('address bar')
+    const userText = firstUserText(payload)
+    expect(userText).toContain('<app_card>')
+    expect(userText).toContain('Chrome App Card')
+    expect(userText).toContain('address bar')
   })
 
   it('includes installed launchable apps in the user context', () => {
@@ -299,18 +262,10 @@ describe('buildChatCompletionPayload', () => {
       ],
     })
 
-    const userMessage = payload.messages[1]
-    if (
-      userMessage.role !== 'user' ||
-      !Array.isArray(userMessage.content) ||
-      userMessage.content[0].type !== 'text'
-    ) {
-      throw new Error('Expected first user content item to be text.')
-    }
-
-    expect(userMessage.content[0].text).toContain('<installed_apps>')
-    expect(userMessage.content[0].text).toContain('Gmail: com.google.android.gm')
-    expect(userMessage.content[0].text).toContain('chrome: com.android.chrome')
+    const userText = firstUserText(payload)
+    expect(userText).toContain('<installed_apps>')
+    expect(userText).toContain('Gmail: com.google.android.gm')
+    expect(userText).toContain('chrome: com.android.chrome')
   })
 
   it('includes prompt-safe custom tools and secret ids in the user context', () => {
@@ -323,19 +278,11 @@ describe('buildChatCompletionPayload', () => {
       secrets: [{ id: 'gmail_password', label: 'Gmail password' }],
     })
 
-    const userMessage = payload.messages[1]
-    if (
-      userMessage.role !== 'user' ||
-      !Array.isArray(userMessage.content) ||
-      userMessage.content[0].type !== 'text'
-    ) {
-      throw new Error('Expected first user content item to be text.')
-    }
-
-    expect(userMessage.content[0].text).toContain('<available_custom_tools>')
-    expect(userMessage.content[0].text).toContain('lookup_order: Lookup an order fixture.')
-    expect(userMessage.content[0].text).toContain('<available_secrets>')
-    expect(userMessage.content[0].text).toContain('gmail_password: Gmail password')
+    const userText = firstUserText(payload)
+    expect(userText).toContain('<available_custom_tools>')
+    expect(userText).toContain('lookup_order: Lookup an order fixture.')
+    expect(userText).toContain('<available_secrets>')
+    expect(userText).toContain('gmail_password: Gmail password')
   })
 
   it('includes runtime action tool signatures in the user context', () => {
@@ -355,17 +302,9 @@ describe('buildChatCompletionPayload', () => {
       },
     })
 
-    const userMessage = payload.messages[1]
-    if (
-      userMessage.role !== 'user' ||
-      !Array.isArray(userMessage.content) ||
-      userMessage.content[0].type !== 'text'
-    ) {
-      throw new Error('Expected first user content item to be text.')
-    }
-
-    expect(userMessage.content[0].text).toContain('<available_action_tools>')
-    expect(userMessage.content[0].text).toContain('tap(x:number required, y:number required)')
+    const userText = firstUserText(payload)
+    expect(userText).toContain('<available_action_tools>')
+    expect(userText).toContain('tap(x:number required, y:number required)')
   })
 
   it('caps installed apps in the user context while keeping relevant matches', () => {
@@ -379,19 +318,11 @@ describe('buildChatCompletionPayload', () => {
       })),
     })
 
-    const userMessage = payload.messages[1]
-    if (
-      userMessage.role !== 'user' ||
-      !Array.isArray(userMessage.content) ||
-      userMessage.content[0].type !== 'text'
-    ) {
-      throw new Error('Expected first user content item to be text.')
-    }
-
-    expect(userMessage.content[0].text).toContain('app44: com.example.app44')
-    expect(userMessage.content[0].text).toContain('app0: com.example.app0')
-    expect(userMessage.content[0].text).toContain('... truncated 5 more apps')
-    expect(userMessage.content[0].text).not.toContain('app39: com.example.app39')
+    const userText = firstUserText(payload)
+    expect(userText).toContain('app44: com.example.app44')
+    expect(userText).toContain('app0: com.example.app0')
+    expect(userText).toContain('... truncated 5 more apps')
+    expect(userText).not.toContain('app39: com.example.app39')
   })
 
   it('preserves conversation messages and injects current context into the latest user turn', () => {
@@ -429,19 +360,16 @@ describe('buildChatCompletionPayload', () => {
       content: '<observation>\nExecuted tap (100, 200)\n</observation>',
     })
 
-    const latestUserMessage = payload.messages[4]
-    if (latestUserMessage.role !== 'user' || !Array.isArray(latestUserMessage.content)) {
-      throw new Error('Expected latest user message to be multimodal.')
-    }
-    expect(latestUserMessage.content[0]).toEqual({
+    const latestUserContent = userMultimodalContent(payload, 4)
+    expect(latestUserContent[0]).toEqual({
       type: 'text',
       text: expect.stringContaining('Now open the Bluetooth page.'),
     })
-    expect(latestUserMessage.content[0]).toEqual({
+    expect(latestUserContent[0]).toEqual({
       type: 'text',
       text: expect.stringContaining('"current_app":"Settings"'),
     })
-    expect(latestUserMessage.content[1]).toEqual({
+    expect(latestUserContent[1]).toEqual({
       type: 'image_url',
       image_url: { url: 'data:image/png;base64,abc123' },
     })
@@ -551,6 +479,69 @@ describe('buildChatCompletionPayload', () => {
     expect(payload.reasoning_effort).toBe('high')
   })
 
+  it('uses Qwen thinking controls instead of reasoning effort for Qwen action requests', () => {
+    const payload = buildChatCompletionPayload({
+      provider: 'qwen',
+      model: 'qwen3.7-plus',
+      reasoningEffort: 'high',
+      qwenThinkingEnabled: true,
+      qwenThinkingBudget: 4096,
+      task: 'Open settings',
+      screenshotDataUrl: 'data:image/png;base64,abc123',
+      screen: { width: 1080, height: 2400 },
+    })
+
+    expect(payload.reasoning_effort).toBeUndefined()
+    expect(payload.enable_thinking).toBe(true)
+    expect(payload.thinking_budget).toBe(4096)
+  })
+
+  it('sends Qwen thinking disabled without a budget when the Qwen toggle is off', () => {
+    const payload = buildChatCompletionPayload({
+      provider: 'qwen',
+      model: 'qwen3.7-plus',
+      qwenThinkingEnabled: false,
+      qwenThinkingBudget: 4096,
+      task: 'Open settings',
+      screenshotDataUrl: 'data:image/png;base64,abc123',
+      screen: { width: 1080, height: 2400 },
+    })
+
+    expect(payload.enable_thinking).toBe(false)
+    expect(payload.thinking_budget).toBeUndefined()
+  })
+
+  it('uses the Qwen default thinking budget when thinking is enabled without an explicit budget', () => {
+    const payload = buildChatCompletionPayload({
+      provider: 'qwen',
+      model: 'qwen3.7-plus',
+      qwenThinkingEnabled: true,
+      task: 'Open settings',
+      screenshotDataUrl: 'data:image/png;base64,abc123',
+      screen: { width: 1080, height: 2400 },
+    })
+
+    expect(payload.enable_thinking).toBe(true)
+    expect(payload.thinking_budget).toBe(300)
+  })
+
+  it('keeps generic reasoning effort when Qwen model text is used with the custom provider', () => {
+    const payload = buildChatCompletionPayload({
+      provider: 'custom',
+      model: 'qwen3.7-plus',
+      reasoningEffort: 'low',
+      qwenThinkingEnabled: true,
+      qwenThinkingBudget: 4096,
+      task: 'Open settings',
+      screenshotDataUrl: 'data:image/png;base64,abc123',
+      screen: { width: 1080, height: 2400 },
+    })
+
+    expect(payload.reasoning_effort).toBe('low')
+    expect(payload.enable_thinking).toBeUndefined()
+    expect(payload.thinking_budget).toBeUndefined()
+  })
+
   it('uses a prebuilt prompt context when provided', () => {
     const payload = buildChatCompletionPayload({
       model: 'agent-model',
@@ -560,19 +551,10 @@ describe('buildChatCompletionPayload', () => {
       screen: { width: 1080, height: 2400 },
     })
 
-    const userMessage = payload.messages[1]
-    if (
-      userMessage.role !== 'user' ||
-      !Array.isArray(userMessage.content) ||
-      userMessage.content[0].type !== 'text'
-    ) {
-      throw new Error('Expected first user content item to be text.')
-    }
-
-    expect(userMessage.content[0].text).toBe(
+    expect(firstUserText(payload)).toBe(
       'Task: Open settings\n<context_summary>\nAlready opened Settings.\n</context_summary>',
     )
-    expect(userMessage.content[1]).toEqual({
+    expect(userMultimodalContent(payload)[1]).toEqual({
       type: 'image_url',
       image_url: { url: 'data:image/png;base64,abc123' },
     })
@@ -612,5 +594,20 @@ describe('buildFinalResponsePayload', () => {
       role: 'user',
       content: expect.stringContaining('Bluetooth settings is open.'),
     })
+  })
+
+  it('uses Qwen thinking controls for final response requests', () => {
+    const payload = buildFinalResponsePayload({
+      provider: 'qwen',
+      model: 'qwen3.7-plus',
+      reasoningEffort: 'medium',
+      qwenThinkingEnabled: true,
+      qwenThinkingBudget: 2048,
+      task: 'Open Bluetooth settings',
+    })
+
+    expect(payload.reasoning_effort).toBeUndefined()
+    expect(payload.enable_thinking).toBe(true)
+    expect(payload.thinking_budget).toBe(2048)
   })
 })

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import {
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -25,7 +26,9 @@ import type { AgentSessionSummary } from '../hooks/useAgentSessionHistory'
 import type { InteractionStreamItem } from '../lib/interactionStream'
 import type { AgentConversationMessage } from '../lib/openAiTypes'
 import type { AgentThreadSummary } from '../lib/threadStore'
+import { useAppCopy } from './AppContext'
 import { AgentStepCard } from './AgentStepCard'
+import { Button, IconButton } from './primitives'
 import { ChatHistorySidebar } from './ChatHistorySidebar'
 import { LazyMarkdownContent } from './LazyMarkdownContent'
 import { PendingActionCard } from './PendingActionCard'
@@ -36,9 +39,9 @@ type ChatPanelProps = {
   chatInput: string
   conversation: AgentConversationMessage[]
   interactionItems?: InteractionStreamItem[]
-  copy: AppCopy
   historySidebarOpen: boolean
   pendingStep: AgentStep | null
+  queuedChatMessageCount: number
   sessionSummary?: AgentSessionSummary
   threadSummaries: AgentThreadSummary[]
   onChatInputChange: (value: string) => void
@@ -60,7 +63,6 @@ export function ChatPanel({
   chatInput,
   conversation,
   interactionItems,
-  copy,
   historySidebarOpen,
   pendingStep,
   threadSummaries,
@@ -74,7 +76,10 @@ export function ChatPanel({
   onSubmitChatMessage,
   onToggleHistorySidebar,
   sessionSummary,
+  queuedChatMessageCount,
 }: ChatPanelProps) {
+  const copy = useAppCopy()
+  const chatInputId = useId()
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null)
   const chatStreamRef = useRef<HTMLDivElement | null>(null)
   const shouldFollowOutputRef = useRef(true)
@@ -90,8 +95,11 @@ export function ChatPanel({
   )
   const activeStepId = isAgentStepBusyTask(busyTask) ? findLatestOpenStepId(visibleItems) : null
   const chatInputRows = Math.min(6, Math.max(1, chatInput.split('\n').length))
+  const visibleQueuedMessageCount =
+    queuedChatMessageCount + (sessionSummary?.pendingUserMessageCount ?? 0)
   const sessionStripVisible =
     Boolean(busyTask) ||
+    visibleQueuedMessageCount > 0 ||
     Boolean(sessionSummary && shouldShowSessionSummary(sessionSummary))
   const submitChatIfNotEmpty = () => {
     if (!chatIsEmpty) {
@@ -184,58 +192,61 @@ export function ChatPanel({
       />
       <div className="panel-title conversation-panel-title chat-shell-header">
         <div className="panel-title-main">
-          <button
-            type="button"
-            className="chat-history-toggle"
+          <IconButton
+            size="md"
             aria-expanded={historySidebarOpen}
             aria-label={historySidebarOpen ? copy.closeHistorySidebar : copy.openHistorySidebar}
             title={historySidebarOpen ? copy.closeHistorySidebar : copy.openHistorySidebar}
             onClick={onToggleHistorySidebar}
+            className="chat-history-toggle"
           >
             <IconSidebarToggle size={18} strokeWidth={2} />
-          </button>
+          </IconButton>
           <h2 className="visually-hidden">{copy.chat}</h2>
         </div>
-        <button
-          type="button"
-          className="panel-title-action"
+        <Button
+          variant="secondary"
+          size="sm"
           aria-label={copy.newChat}
           onClick={handleStartNewChat}
           disabled={isBusy}
           title={busyTask ? copy.waitForCurrentRun : copy.newChat}
+          className="panel-title-action"
         >
           <SquarePen size={16} strokeWidth={2} />
           {copy.newChat}
-        </button>
+        </Button>
       </div>
-      {sessionStripVisible && sessionSummary ? (
+      {sessionStripVisible ? (
         <div className="chat-session-strip" aria-label={copy.sessionState}>
-          <span className={`chat-session-pill status-${sessionSummary.status}`}>
-            {busyTask ? (
-              <LoaderCircle className="chat-run-status-spinner" size={13} />
-            ) : (
-              <Activity size={13} />
-            )}
-            {formatSessionStatus(sessionSummary.status, copy)}
-          </span>
-          {sessionSummary.stepNumber > 0 ? (
+          {sessionSummary ? (
+            <span className={`chat-session-pill status-${sessionSummary.status}`}>
+              {busyTask ? (
+                <LoaderCircle className="chat-run-status-spinner" size={13} />
+              ) : (
+                <Activity size={13} />
+              )}
+              {formatSessionStatus(sessionSummary.status, copy)}
+            </span>
+          ) : null}
+          {sessionSummary && sessionSummary.stepNumber > 0 ? (
             <span className="chat-session-pill">
               {copy.sessionStep(sessionSummary.stepNumber)}
             </span>
           ) : null}
-          {sessionSummary.pendingUserMessageCount > 0 ? (
+          {visibleQueuedMessageCount > 0 ? (
             <span className="chat-session-pill queued">
               <MessageSquare size={13} />
-              {copy.queuedMessages(sessionSummary.pendingUserMessageCount)}
+              {copy.queuedMessages(visibleQueuedMessageCount)}
             </span>
           ) : null}
-          {sessionSummary.contextCompactedThroughStep > 0 ? (
+          {sessionSummary && sessionSummary.contextCompactedThroughStep > 0 ? (
             <span className="chat-session-pill compacted">
               <Layers3 size={13} />
               {copy.contextCompactedThroughStep(sessionSummary.contextCompactedThroughStep)}
             </span>
           ) : null}
-          {sessionSummary.latestStatusMessage ? (
+          {sessionSummary?.latestStatusMessage ? (
             <span className="chat-session-message" title={sessionSummary.latestStatusMessage}>
               {sessionSummary.latestStatusMessage}
             </span>
@@ -292,15 +303,15 @@ export function ChatPanel({
         ) : null}
       </div>
       {showScrollToBottom ? (
-        <button
-          type="button"
-          className="chat-scroll-bottom"
+        <IconButton
+          size="md"
           aria-label={copy.scrollToLatest}
           title={copy.scrollToLatest}
           onClick={() => scrollToBottom()}
+          className="chat-scroll-bottom"
         >
           <ArrowDown size={16} />
-        </button>
+        </IconButton>
       ) : null}
       <form
         className="chat-composer"
@@ -310,11 +321,14 @@ export function ChatPanel({
         }}
       >
         <div className="chat-input-frame" onClick={focusComposerShell}>
-          <label className="chat-input-label">
+          <label className="chat-input-label" htmlFor={chatInputId}>
             <span className="visually-hidden">{copy.chatMessage}</span>
             <textarea
+              id={chatInputId}
+              autoComplete="off"
               ref={chatInputRef}
               className="chat-input"
+              name="chatMessage"
               value={chatInput}
               onChange={handleChatInputChange}
               onKeyDown={handleComposerKeyDown}
@@ -325,25 +339,28 @@ export function ChatPanel({
           <div className="chat-input-actions">
             <span className="chat-input-action-spacer" aria-hidden="true" />
             {canStopRun ? (
-              <button
-                type="button"
-                className="chat-send chat-stop"
+              <IconButton
+                size="md"
+                variant="danger"
                 onClick={onStopRun}
                 title={copy.stopRun}
                 aria-label={copy.stopRun}
+                className="chat-send chat-stop"
               >
                 <Square size={14} fill="currentColor" />
-              </button>
+              </IconButton>
             ) : (
-              <button
+              <IconButton
+                size="md"
+                variant="primary"
                 type="submit"
-                className="chat-send primary"
                 disabled={chatIsEmpty}
                 title={chatIsEmpty ? copy.typeMessageFirst : copy.send}
                 aria-label={copy.send}
+                className="chat-send"
               >
                 <Send size={16} />
-              </button>
+              </IconButton>
             )}
           </div>
         </div>

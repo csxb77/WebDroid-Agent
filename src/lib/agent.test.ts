@@ -331,6 +331,32 @@ describe('runAgentStep', () => {
     expect(step.executionAction).toEqual({ action: 'tap', x: 500, y: 1000, reason: 'open' })
   })
 
+  it('uses normalized screenshots and converts normalized model coordinates before execution', async () => {
+    const device = fakePreprocessedDevice()
+    const client: OpenAiClient = {
+      completeAction: vi.fn(async () => '{"action":"tap","x":500,"y":500,"reason":"center"}'),
+    }
+
+    const step = await runAgentStep({
+      device,
+      client,
+      actionProtocol: 'webdroid_normalized_json',
+      modelConfig: { baseUrl: 'https://api.example.com/v1', apiKey: 'key', model: 'm' },
+      task: 'Tap center',
+    })
+
+    expect(device.screenshot).toHaveBeenCalledWith({ coordinateMode: 'normalized_0_1000' })
+    expect(client.completeAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionProtocol: 'webdroid_normalized_json',
+        promptContext: expect.stringContaining('"coordinate_mode":"normalized_0_1000"'),
+      }),
+    )
+    expect(step.promptContext).toContain('0-1000')
+    expect(step.action).toEqual({ action: 'tap', x: 250, y: 500, reason: 'center' })
+    expect(step.executionAction).toEqual({ action: 'tap', x: 500, y: 1000, reason: 'center' })
+  })
+
   it('continues with an unknown current app when app detection fails', async () => {
     const device = fakeDevice()
     vi.mocked(device.getDeviceState).mockRejectedValueOnce(new Error('dumpsys failed'))
@@ -392,6 +418,39 @@ describe('runAgentStep', () => {
         conversation: [],
         stream: false,
         promptContext: expect.stringContaining('previous model response'),
+      }),
+    )
+  })
+
+  it('keeps normalized coordinate instructions in empty-response retry prompts', async () => {
+    const device = fakeDevice()
+    const client: OpenAiClient = {
+      completeAction: vi
+        .fn()
+        .mockRejectedValueOnce(new OpenAiClientError('No assistant content returned by model.'))
+        .mockResolvedValueOnce('{"action":"tap","x":500,"y":500,"reason":"retry"}'),
+    }
+
+    const step = await runAgentStep({
+      device,
+      client,
+      actionProtocol: 'webdroid_normalized_json',
+      modelConfig: {
+        baseUrl: 'https://api.example.com/v1',
+        apiKey: 'key',
+        model: 'm',
+        stream: true,
+      },
+      task: 'Tap center',
+    })
+
+    expect(step.action).toEqual({ action: 'tap', x: 540, y: 1200, reason: 'retry' })
+    expect(client.completeAction).toHaveBeenCalledTimes(2)
+    expect(client.completeAction).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        promptContext: expect.stringContaining(
+          'For the retry, keep using Vision-Pointer-style 0-1000 normalized coordinates.',
+        ),
       }),
     )
   })
@@ -483,6 +542,59 @@ describe('createAgentRunner', () => {
     expect(client.completeAction).toHaveBeenLastCalledWith(
       expect.objectContaining({
         promptContext: expect.stringContaining('tap failed: stale coordinates'),
+      }),
+    )
+  })
+
+  it('feeds invalid model actions back into the next model step without stopping', async () => {
+    const device = fakeDevice()
+    const session = createAgentSession('Open app')
+    const client: OpenAiClient = {
+      completeAction: vi.fn(async () => {
+        if (vi.mocked(client.completeAction).mock.calls.length === 1) {
+          return '{"action":"tap","x":9999,"y":200}'
+        }
+        return '{"action":"done","summary":"recovered"}'
+      }),
+    }
+    const runner = createAgentRunner({ device, client })
+
+    const result = await runner.run({
+      modelConfig: { baseUrl: 'https://api.example.com/v1', apiKey: 'key', model: 'm' },
+      task: 'Open app',
+      autoExecute: true,
+      maxSteps: 3,
+      session,
+    })
+
+    expect(result.status).toBe('done')
+    expect(client.completeAction).toHaveBeenCalledTimes(2)
+    expect(device.executed).toEqual([])
+    expect(session.turns[0]).toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        modelOutput: '{"action":"tap","x":9999,"y":200}',
+        preview: 'invalid action',
+        executionResult: expect.stringContaining('outside the current screen'),
+        success: false,
+      }),
+    )
+    expect(session.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'observation',
+          content: expect.stringContaining('outside the current screen'),
+        }),
+      ]),
+    )
+    expect(client.completeAction).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        promptContext: expect.stringContaining('<recent_action_errors>'),
+      }),
+    )
+    expect(client.completeAction).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        promptContext: expect.stringContaining('outside the current screen'),
       }),
     )
   })

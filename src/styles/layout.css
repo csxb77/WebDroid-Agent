@@ -1,7 +1,7 @@
 .app-shell {
   min-height: 100dvh;
   overflow-x: auto;
-  padding: var(--space-5) clamp(var(--space-4), 2vw, var(--space-8)) var(--space-6);
+  padding: var(--space-6) clamp(var(--space-5), 2.5vw, var(--space-8)) var(--space-6);
   width: 100%;
 }
 
@@ -154,8 +154,6 @@ h2 {
 .status:hover {
   background: var(--button-bg-hover);
   border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
 }
 
 .status.ok {
@@ -190,7 +188,6 @@ h2 {
   background: var(--button-bg);
   border-color: var(--border);
   color: var(--text);
-  transform: translateY(-1px);
 }
 
 /* ═══ Alert Banner ═══ */
@@ -223,10 +220,10 @@ h2 {
 .workspace {
   align-items: stretch;
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-6);
   grid-template-columns:
-    minmax(320px, 360px)
-    minmax(400px, 500px)
+    minmax(280px, 320px)
+    minmax(380px, 440px)
     minmax(380px, 1fr);
   margin: 0 auto;
   max-width: 1480px;
@@ -236,7 +233,7 @@ h2 {
 }
 
 .workspace-config-collapsed {
-  grid-template-columns: 64px minmax(420px, 520px) minmax(380px, 1fr);
+  grid-template-columns: 60px minmax(400px, 480px) minmax(380px, 1fr);
 }
 
 .phone-column {
@@ -245,7 +242,7 @@ h2 {
   gap: var(--space-4);
   justify-self: center;
   min-width: 0;
-  width: min(100%, 500px);
+  width: min(100%, 440px);
 }
 
 /* ═══ Panels — Frosted Glass ═══ */
@@ -290,5 +287,5 @@ h2 {
 }
 
 .panel-title svg {
-  color: var(--accent);
+  color: var(--text-muted);
 }

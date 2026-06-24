@@ -97,4 +97,28 @@ describe('DevicePanel', () => {
     expect(onConnectDevice).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('dialog')).toBeNull()
   })
+
+  it('weights connect as the primary device action and capture as secondary', () => {
+    renderDevicePanel({
+      state: {
+        ...createDevicePanelProps().state,
+        connected: true,
+        currentApp: 'Chrome',
+        deviceInfo: { name: 'Pixel', serial: 'abc123' },
+        deviceState: { app: 'Chrome', packageName: 'com.android.chrome' },
+      },
+    })
+
+    expect(screen.getByRole('button', { name: '连接' }).className).toContain('primary')
+    expect(screen.getByRole('button', { name: '断开' }).className).toContain('secondary')
+    expect(screen.getByRole('button', { name: '截图' }).className).toContain('secondary')
+  })
+
+  it('hides unavailable secondary device actions until a device is connected', () => {
+    renderDevicePanel()
+
+    expect(screen.getByRole('button', { name: '连接' }).className).toContain('primary')
+    expect(screen.queryByRole('button', { name: '断开' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '截图' })).toBeNull()
+  })
 })

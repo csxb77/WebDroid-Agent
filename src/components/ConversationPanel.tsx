@@ -1,4 +1,3 @@
-import type { AppCopy } from '../lib/appCopy'
 import type { AgentStep } from '../lib/agent'
 import type { BusyTask } from '../lib/busyTask'
 import type { InteractionStreamItem } from '../lib/interactionStream'
@@ -13,9 +12,9 @@ export type ConversationPanelProps = {
   chatInput: string
   conversation: AgentConversationMessage[]
   interactionItems?: InteractionStreamItem[]
-  copy: AppCopy
   historySidebarOpen: boolean
   pendingStep: AgentStep | null
+  queuedChatMessageCount: number
   sessionSummary?: AgentSessionSummary
   threadSummaries: AgentThreadSummary[]
   onChatInputChange: (value: string) => void
@@ -35,7 +34,6 @@ export function ConversationPanel({
   chatInput,
   conversation,
   interactionItems,
-  copy,
   historySidebarOpen,
   onChatInputChange,
   onCloseHistorySidebar,
@@ -47,6 +45,7 @@ export function ConversationPanel({
   onSubmitChatMessage,
   onToggleHistorySidebar,
   pendingStep,
+  queuedChatMessageCount,
   sessionSummary,
   threadSummaries,
 }: ConversationPanelProps) {
@@ -58,8 +57,8 @@ export function ConversationPanel({
         chatInput={chatInput}
         conversation={conversation}
         interactionItems={interactionItems}
-        copy={copy}
         historySidebarOpen={historySidebarOpen}
+        queuedChatMessageCount={queuedChatMessageCount}
         sessionSummary={sessionSummary}
         threadSummaries={threadSummaries}
         onChatInputChange={onChatInputChange}

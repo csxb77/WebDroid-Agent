@@ -1,6 +1,7 @@
 import type { DeviceScreenTree, DeviceState, InstalledApp } from '../adapters/deviceTypes'
 import { formatScreenTreeForPrompt } from '../adapters/uiAutomator'
 import type { ScreenSize } from './actionTypes'
+import type { ActionProtocol } from './actionProtocol'
 import {
   addThreadEvent,
   appendThreadContextSummary,
@@ -18,10 +19,10 @@ import {
 } from './textRetention'
 import {
   buildPromptScreenInfo,
-  CANONICAL_COORDINATE_INSTRUCTION,
   formatInstalledAppsForPrompt,
   formatPromptHistoryItem,
 } from './promptContextFormatting'
+import { coordinateInstructionForActionProtocol } from './coordinateSystems'
 import { modelScreenshotView } from './screenshot'
 
 const COMPACTED_TURN_EXECUTION_RESULT_MAX_LENGTH = 4000
@@ -39,6 +40,7 @@ const TASK_STATE_MEMORY_ITEMS = 8
 const TASK_STATE_VISITED_APP_LIMIT = 8
 
 export type BuildAgentPromptContextInput = {
+  actionProtocol?: ActionProtocol
   thread?: AgentThread
   task: string
   history?: readonly AgentHistoryItem[]
@@ -67,6 +69,7 @@ export type BuiltAgentPromptContext = {
 }
 
 export function buildAgentPromptContext({
+  actionProtocol = 'webdroid_json',
   thread,
   task,
   history: fallbackHistory,
@@ -90,7 +93,13 @@ export function buildAgentPromptContext({
   const history = thread
     ? historyFromRecentTurns(thread, maxRecentTurns)
     : (fallbackHistory ?? []).slice(-maxRecentTurns)
-  const screenInfo = buildPromptScreenInfo({ currentApp, deviceScreen, deviceState, screen })
+  const screenInfo = buildPromptScreenInfo({
+    actionProtocol,
+    currentApp,
+    deviceScreen,
+    deviceState,
+    screen,
+  })
 
   const lines = [
     `Task: ${truncatePromptContextText(task, TASK_CONTEXT_MAX_LENGTH)}`,
@@ -132,7 +141,7 @@ export function buildAgentPromptContext({
     ),
     'Treat the latest user message as the current instruction. Use earlier messages, observations, and context summary only as context.',
     'If a recent action failed, use its feedback to choose a different recovery action; do not repeat the exact same failed action.',
-    CANONICAL_COORDINATE_INSTRUCTION,
+    coordinateInstructionForActionProtocol(actionProtocol),
   ].filter(Boolean) as string[]
 
   if (history.length > 0) {
@@ -498,7 +507,7 @@ function formatTaskState({
     ? [
         'Guidance: Preserve the original task while using helper apps.',
         'If SMS, Messages, Mail, Browser, or Authenticator is opened only to retrieve a verification code,',
-        'store the code with note/remember, return to the previous task app, and continue the original flow.',
+        'store the code with note, return to the previous task app, and continue the original flow.',
         'Do not restart the login flow or keep reopening the helper app unless the code is missing or stale.',
       ].join(' ')
     : [

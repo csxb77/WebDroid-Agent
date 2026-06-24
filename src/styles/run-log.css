@@ -200,8 +200,7 @@
 }
 
 .log-screenshot-button:hover {
-  box-shadow: var(--shadow-md), var(--shadow-accent-sm);
-  transform: scale(1.04);
+  box-shadow: var(--shadow-md);
 }
 
 .log-screenshot-button img {

@@ -153,13 +153,11 @@ button {
 button:hover:not(:disabled) {
   background: var(--button-bg-hover);
   border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
 }
 
 button:active:not(:disabled) {
+  background: var(--button-bg-hover);
   box-shadow: var(--shadow-xs);
-  transform: translateY(0);
 }
 
 button:focus-visible {

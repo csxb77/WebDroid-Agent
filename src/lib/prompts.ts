@@ -1,4 +1,8 @@
 import type { ActionProtocol } from './actionProtocol'
+import {
+  protocolCoordinateInstructionForActionProtocol,
+  touchCoordinateInstructionForActionProtocol,
+} from './coordinateSystems'
 
 export const PHONE_OPERATION_RULES = [
   [
@@ -46,10 +50,10 @@ const MEMORY_ENABLED_PHONE_OPERATION_RULES = [
   [
     'When temporarily opening SMS, Messages, Mail, Browser, or an authenticator app',
     'to retrieve a verification code, preserve the original task, record the code',
-    'with note/remember, return to the previous task app, and continue there.',
+    'with note, return to the previous task app, and continue there.',
   ].join(' '),
   [
-    'Use note/remember to store short durable facts needed later, such as',
+    'Use note to store short durable facts needed later, such as',
     'verification codes, selected accounts, original app names, or return instructions.',
   ].join(' '),
 ]
@@ -57,7 +61,7 @@ const MEMORY_ENABLED_PHONE_OPERATION_RULES = [
 const MEMORY_DISABLED_PHONE_OPERATION_RULES = [
   [
     'Memory is disabled.',
-    'Do not use note/remember for durable facts, and do not assume observations will be saved for later tasks.',
+    'Do not use note for durable facts, and do not assume observations will be saved for later tasks.',
   ].join(' '),
   [
     'When temporarily opening SMS, Messages, Mail, Browser, or an authenticator app',
@@ -115,11 +119,7 @@ export function buildSystemPrompt({
       'or already-filled field; omit clear or set clear:false only when appending.',
     ].join(' '),
     'Use wait with duration in seconds, defaulting to 1.0, for animations, page loads, or time-based operations.',
-    [
-      'For canonical JSON touch coordinates, use screenshot pixel coordinates from the attached image.',
-      'Major grid lines may be labeled with x/y pixel values;',
-      'use those labels as anchors, not grid-cell numbers.',
-    ].join(' '),
+    touchCoordinateInstructionForActionProtocol(actionProtocol),
     'Do not invent shell commands.',
     'If <available_action_tools> is present in context, treat it as the executable tool contract and use only listed action names.',
     ...behaviorRules,
@@ -139,47 +139,9 @@ function buildPhoneOperationRules(memoryEnabled: boolean) {
 }
 
 function buildProtocolInstructions(actionProtocol: ActionProtocol) {
-  if (actionProtocol === 'open_autoglm_function') {
-    return [
-      'Return exactly this structure and no markdown:',
-      '<think>{short reason}</think><answer>{action}</answer>',
-      'Supported Open-AutoGLM actions:',
-      'do(action="Launch", app="Settings|Chrome|YouTube|京东|package.name")',
-      'do(action="Tap", element=[x,y], message="required for sensitive taps")',
-      'do(action="Swipe", start=[x1,y1], end=[x2,y2])',
-      'do(action="Type", text="Unicode text to type")',
-      'do(action="Open URL", url="https://example.com or app://deep-link")',
-      'do(action="Set Clipboard", text="text to paste later")',
-      'do(action="Paste")',
-      'do(action="Back")',
-      'do(action="Home")',
-      'do(action="Long Press", element=[x,y])',
-      'do(action="Double Tap", element=[x,y])',
-      'do(action="Wait", duration="1 seconds")',
-      'do(action="Take_over", message="what the human must do")',
-      'do(action="Note", message="short observation")',
-      'view_screenshot(ref="step-3")',
-      'type_secret(secret_id="local-secret-id", clear=True)',
-      'custom_tool(tool="tool_name")',
-      'finish(message="what was completed")',
-      'For Open-AutoGLM element/start/end coordinates, use the 0-1000 relative coordinate space.',
-    ]
-  }
-
-  if (actionProtocol === 'mobilerun_xml') {
-    return [
-      'Return exactly one mobilerun XML tool call block and no markdown:',
-      '<function_calls><invoke name="click_at"><parameter name="x">100</parameter><parameter name="y">200</parameter></invoke></function_calls>',
-      'A block may include multiple <invoke> items; they execute sequentially in order.',
-      'Supported mobilerun-style tools:',
-      'open_app(text), open_url(url), click_at(x,y), click_area(x1,y1,x2,y2), long_press_at(x,y), swipe(coordinate,coordinate2,duration), type_text(text,clear), set_clipboard(text), paste(), system_button(button), wait(duration), remember(information), view_screenshot(ref,step), type_secret(secret_id,clear), custom_tool(tool,input), complete(success,message).',
-      'Use multiple invokes only for short, visible, stable action chains. Prefer a later observation when an action changes the screen.',
-      'Use screenshot pixel coordinates for click_at, click_area, long_press_at, and swipe coordinates.',
-    ]
-  }
-
   return [
     'Return only one JSON object. No markdown, no prose.',
+    protocolCoordinateInstructionForActionProtocol(actionProtocol),
     'Supported canonical JSON actions:',
     '{"action":"launch","app":"Settings|Chrome|YouTube|京东|package.name","reason":"short reason"}',
     [
@@ -209,10 +171,5 @@ function buildProtocolInstructions(actionProtocol: ActionProtocol) {
     '{"action":"note","message":"short observation"}',
     '{"action":"done","summary":"what was completed"}',
     'Use sequence or repeat only for short, visible, stable action chains. sequence is capped at 8 child actions and repeat count at 10. Child actions cannot be done, take_over, sequence, or repeat.',
-    [
-      'Mobilerun-compatible aliases are accepted when needed:',
-      'click_at, click_area, long_press_at, type_text, system_button, open_app, remember, complete,',
-      'view_screenshot, type_secret, custom_tool; swipe may use coordinate, coordinate2, and duration seconds.',
-    ].join(' '),
   ]
 }

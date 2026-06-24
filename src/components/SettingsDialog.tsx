@@ -12,6 +12,7 @@ import {
   LayoutPanelLeft,
   ListChecks,
   MessageSquareX,
+  Bell,
   PanelTop,
   RotateCcw,
   Search,
@@ -44,6 +45,7 @@ export type SettingsDialogProps = {
   disabledActionTools: readonly ActionToolName[]
   languageMode: LanguageMode
   maxSteps: number
+  taskNotificationsEnabled: boolean
   onAppCardsJsonChange: (value: string) => void
   onCustomToolsJsonChange: (value: string) => void
   onDisabledActionToolsChange: (value: ActionToolName[]) => void
@@ -54,6 +56,7 @@ export type SettingsDialogProps = {
   onMaxStepsChange: (value: number) => void
   onResetAppCards: () => void
   onSecretRecordsJsonChange: (value: string) => void
+  onTaskNotificationsEnabledChange: (value: boolean) => void
   onThemeModeChange: (value: ThemeMode) => void
   repositoryStats: RepositoryStats | null
   repositoryStatsStatus: 'idle' | 'loading' | 'done' | 'error'
@@ -87,6 +90,7 @@ export function SettingsDialog({
   disabledActionTools,
   languageMode,
   maxSteps,
+  taskNotificationsEnabled,
   onAppCardsJsonChange,
   onCustomToolsJsonChange,
   onDisabledActionToolsChange,
@@ -97,6 +101,7 @@ export function SettingsDialog({
   onMaxStepsChange,
   onResetAppCards,
   onSecretRecordsJsonChange,
+  onTaskNotificationsEnabledChange,
   onThemeModeChange,
   repositoryStats,
   repositoryStatsStatus,
@@ -258,6 +263,25 @@ export function SettingsDialog({
                         value={maxSteps}
                         onChange={(event) => onMaxStepsChange(event.target.valueAsNumber)}
                       />
+                    </label>
+                    <label className="settings-field settings-toggle-field">
+                      <span>
+                        <Bell size={16} />
+                        {copy.taskNotifications}
+                      </span>
+                      <span className="toggle settings-preference-toggle">
+                        <input
+                          type="checkbox"
+                          checked={taskNotificationsEnabled}
+                          onChange={(event) =>
+                            onTaskNotificationsEnabledChange(event.target.checked)
+                          }
+                          aria-label={copy.taskNotifications}
+                        />
+                        <span>
+                          {taskNotificationsEnabled ? copy.actionToolEnabled : copy.actionToolDisabled}
+                        </span>
+                      </span>
                     </label>
                   </div>
                 </section>

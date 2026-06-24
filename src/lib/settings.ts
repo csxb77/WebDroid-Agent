@@ -5,6 +5,13 @@ import {
   type ActionProtocol,
 } from './actionProtocol'
 import { isActionToolName, type ActionToolName } from './toolRegistry'
+import {
+  DEFAULT_QWEN_THINKING_BUDGET,
+  MAX_QWEN_THINKING_BUDGET,
+  MIN_QWEN_THINKING_BUDGET,
+  isModelProviderPreset,
+  migrateProvider,
+} from './modelProviders'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 export type LanguageMode = 'system' | 'zh-CN' | 'en-US'
@@ -14,6 +21,7 @@ export type AppSettings = {
   modelConfig: ModelConfig
   maxSteps: number
   memoryEnabled: boolean
+  taskNotificationsEnabled: boolean
   preferAdbKeyboard: boolean
   confirmSensitiveActions: boolean
   unrestrictedMode: boolean
@@ -47,6 +55,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   maxSteps: 50,
   memoryEnabled: false,
+  taskNotificationsEnabled: false,
   preferAdbKeyboard: false,
   confirmSensitiveActions: true,
   unrestrictedMode: false,
@@ -97,6 +106,7 @@ function normalizeSettings(candidate: unknown): AppSettings {
   }
 
   const modelConfig = isRecord(candidate.modelConfig) ? candidate.modelConfig : {}
+  const rawProvider = migrateProvider(modelConfig.provider)
 
   return {
     actionProtocol: readActionProtocol(candidate.actionProtocol, DEFAULT_SETTINGS.actionProtocol),
@@ -104,12 +114,28 @@ function normalizeSettings(candidate: unknown): AppSettings {
       baseUrl: readString(modelConfig.baseUrl, DEFAULT_SETTINGS.modelConfig.baseUrl),
       apiKey: readString(modelConfig.apiKey, DEFAULT_SETTINGS.modelConfig.apiKey),
       model: readString(modelConfig.model, DEFAULT_SETTINGS.modelConfig.model),
+      ...(isModelProviderPreset(rawProvider) ? { provider: rawProvider } : {}),
       ...(isReasoningEffort(modelConfig.reasoningEffort)
         ? { reasoningEffort: modelConfig.reasoningEffort }
+        : {}),
+      ...(isModelProviderPreset(rawProvider) && rawProvider === 'qwen'
+        ? {
+            qwenThinkingEnabled: readBoolean(modelConfig.qwenThinkingEnabled, true),
+            qwenThinkingBudget: readRangeNumber(
+              modelConfig.qwenThinkingBudget,
+              DEFAULT_QWEN_THINKING_BUDGET,
+              MIN_QWEN_THINKING_BUDGET,
+              MAX_QWEN_THINKING_BUDGET,
+            ),
+          }
         : {}),
     },
     maxSteps: normalizeMaxSteps(candidate.maxSteps),
     memoryEnabled: readBoolean(candidate.memoryEnabled, DEFAULT_SETTINGS.memoryEnabled),
+    taskNotificationsEnabled: readBoolean(
+      candidate.taskNotificationsEnabled,
+      DEFAULT_SETTINGS.taskNotificationsEnabled,
+    ),
     preferAdbKeyboard: readBoolean(candidate.preferAdbKeyboard, DEFAULT_SETTINGS.preferAdbKeyboard),
     confirmSensitiveActions: readBoolean(
       candidate.confirmSensitiveActions,

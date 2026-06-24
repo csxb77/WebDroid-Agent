@@ -1,12 +1,13 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DeviceBackend } from '../adapters/deviceTypes'
 import {
   addUserMessage,
   createAgentRunner,
-  queueUserMessage,
   recordAgentStepExecutionDuration,
   recordAgentFinalResponse,
   recordAgentStep,
+  type AgentRunResult,
+  type AgentRunStatus,
   type AgentSession,
   type AgentStep,
 } from '../lib/agent'
@@ -16,6 +17,7 @@ import type { AppCopy } from '../lib/appCopy'
 import type { ActionProtocol } from '../lib/actionProtocol'
 import type { AppCardMap } from '../lib/appCards'
 import type { CustomToolDefinition, SecretRecord } from '../lib/agentResources'
+import { delayWithAbort } from '../lib/abortSignal'
 import type { BusyTask, BusyTaskId } from '../lib/busyTask'
 import type { OpenAiClient, ModelConfig } from '../lib/openAiTypes'
 import type { LogEntryInput } from '../lib/runLogEntries'
@@ -28,6 +30,14 @@ import type { ActionToolRegistry } from '../lib/toolRegistry'
 import type { DeviceSnapshotUpdate } from './useDeviceController'
 
 type RunTask = (id: BusyTaskId, label: string, action: () => Promise<void>) => Promise<void>
+
+const COORDINATE_ACTION_PREVIEW_MS = 2000
+
+export type RunEndNotification = {
+  status: AgentRunStatus | 'error'
+  title: string
+  detail?: string
+}
 
 type UseAgentRunControllerInput = {
   actionProtocol: ActionProtocol
@@ -55,6 +65,7 @@ type UseAgentRunControllerInput = {
   memoryItems: readonly string[]
   modelConfig: ModelConfig
   onMemoryItem: (information: string) => void
+  onRunEndNotification?: (notification: RunEndNotification) => void
   pendingStep: AgentStep | null
   runTask: RunTask
   setChatInput: (value: string) => void
@@ -86,6 +97,7 @@ export function useAgentRunController({
   memoryItems,
   modelConfig,
   onMemoryItem,
+  onRunEndNotification,
   pendingStep,
   runTask,
   setChatInput,
@@ -98,6 +110,8 @@ export function useAgentRunController({
   unrestrictedMode,
 }: UseAgentRunControllerInput) {
   const abortRef = useRef<AbortController | null>(null)
+  const flushingQueuedMessageRef = useRef(false)
+  const [queuedChatMessages, setQueuedChatMessages] = useState<string[]>([])
 
   const executePendingStep = useCallback(async () => {
     if (!pendingStep) {
@@ -118,6 +132,14 @@ export function useAgentRunController({
         })
         addLog({ tone: 'ok', title: copy.taskComplete, detail: finalResponse })
         recordThreadStatus(ensureSession(), 'done', finalResponse)
+        notifyRunEnd(
+          onRunEndNotification,
+          createRunEndNotification(
+            { status: 'done', steps: [pendingStep], finalResponse },
+            copy,
+            maxSteps,
+          ),
+        )
         setPendingStep(null)
         syncConversation()
         return
@@ -165,8 +187,8 @@ export function useAgentRunController({
       } else {
         recordThreadStatus(ensureSession(), 'idle')
       }
-      await device.refreshDisplayedSnapshot()
       setPendingStep(null)
+      await device.refreshDisplayedSnapshot()
       syncConversation()
     })
   }, [
@@ -180,7 +202,9 @@ export function useAgentRunController({
     ensureSession,
     memoryEnabled,
     onMemoryItem,
+    onRunEndNotification,
     modelConfig,
+    maxSteps,
     pendingStep,
     runTask,
     setError,
@@ -225,7 +249,7 @@ export function useAgentRunController({
           confirmSensitiveAction: device.confirmSensitiveAction,
           unrestrictedMode,
           onSnapshot: device.applyDeviceSnapshot,
-          onStep: (step) => {
+          onStep: async (step) => {
             device.applyDeviceSnapshot(step)
             setPendingStep(step.action.action === 'done' ? null : step)
             addLog({
@@ -236,6 +260,9 @@ export function useAgentRunController({
               timeline: buildAgentStepTimeline(step),
             })
             syncConversation()
+            if (isCoordinatePreviewAction(step.action)) {
+              await delayWithAbort(COORDINATE_ACTION_PREVIEW_MS, abortController.signal)
+            }
           },
           onExecuted: async (step, commandResult) => {
             addLog({
@@ -245,6 +272,7 @@ export function useAgentRunController({
               screenshot: toLogScreenshot(step.screenshot),
               timeline: buildAgentStepTimeline(step, commandResult),
             })
+            setPendingStep(null)
             await device.refreshDisplayedSnapshot()
             syncConversation()
           },
@@ -274,6 +302,7 @@ export function useAgentRunController({
           addLog({ tone: 'warn', title: copy.loopGuardStopped, detail: result.reason })
           recordThreadStatus(session, 'stopped', result.reason ?? copy.loopGuardStopped)
         }
+        notifyRunEnd(onRunEndNotification, createRunEndNotification(result, copy, maxSteps))
         if (result.status !== 'awaiting_takeover') {
           setPendingStep(null)
         }
@@ -281,6 +310,11 @@ export function useAgentRunController({
       } catch (caught) {
         const message = formatCaughtError(caught)
         recordThreadStatus(session, 'error', message)
+        notifyRunEnd(onRunEndNotification, {
+          status: 'error',
+          title: copy.sessionStatusError,
+          detail: message,
+        })
         syncConversation()
         throw caught
       } finally {
@@ -308,6 +342,7 @@ export function useAgentRunController({
     memoryItems,
     modelConfig,
     onMemoryItem,
+    onRunEndNotification,
     runTask,
     screenBlackoutDuringAutoControl,
     secrets,
@@ -317,21 +352,8 @@ export function useAgentRunController({
     unrestrictedMode,
   ])
 
-  const submitChatMessage = useCallback(async () => {
-    const message = chatInput.trim()
-    if (!message) {
-      return
-    }
-
-    setChatInput('')
+  const sendChatMessage = useCallback(async (message: string) => {
     const session = ensureSession()
-
-    if (busyTask) {
-      queueUserMessage(session, message)
-      syncConversation()
-      addLog({ tone: 'info', title: copy.userMessageQueued, detail: message })
-      return
-    }
 
     addUserMessage(session, message)
     syncConversation()
@@ -344,15 +366,65 @@ export function useAgentRunController({
     await runAutoLoop()
   }, [
     addLog,
-    busyTask,
     canRunAgent,
-    chatInput,
     copy,
     ensureSession,
     runAutoLoop,
-    setChatInput,
     syncConversation,
   ])
+
+  const submitChatMessage = useCallback(async () => {
+    const message = chatInput.trim()
+    if (!message) {
+      return
+    }
+
+    setChatInput('')
+
+    if (busyTask) {
+      setQueuedChatMessages((current) => [...current, message])
+      addLog({ tone: 'info', title: copy.userMessageQueued, detail: message })
+      return
+    }
+
+    await sendChatMessage(message)
+  }, [
+    addLog,
+    busyTask,
+    chatInput,
+    copy,
+    sendChatMessage,
+    setChatInput,
+  ])
+
+  useEffect(() => {
+    if (busyTask || queuedChatMessages.length === 0 || flushingQueuedMessageRef.current) {
+      return
+    }
+
+    const [message] = queuedChatMessages
+    if (!message) {
+      return
+    }
+
+    flushingQueuedMessageRef.current = true
+    let cancelled = false
+    queueMicrotask(() => {
+      if (cancelled) {
+        flushingQueuedMessageRef.current = false
+        return
+      }
+      setQueuedChatMessages((current) => current.slice(1))
+      void sendChatMessage(message).finally(() => {
+        flushingQueuedMessageRef.current = false
+        setQueuedChatMessages((current) => (current.length > 0 ? [...current] : current))
+      })
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [busyTask, queuedChatMessages, sendChatMessage])
 
   const stopCurrentRun = useCallback(() => {
     abortRef.current?.abort()
@@ -360,9 +432,77 @@ export function useAgentRunController({
 
   return {
     executePendingStep,
+    queuedChatMessageCount: queuedChatMessages.length,
     stopCurrentRun,
     submitChatMessage,
   }
+}
+
+export function createRunEndNotification(
+  result: AgentRunResult,
+  copy: AppCopy,
+  maxSteps: number,
+): RunEndNotification {
+  if (result.status === 'done') {
+    return {
+      status: result.status,
+      title: copy.taskComplete,
+      detail: result.finalResponse,
+    }
+  }
+  if (result.status === 'max_steps') {
+    return {
+      status: result.status,
+      title: copy.maxStepsReached,
+      detail: `${maxSteps} steps`,
+    }
+  }
+  if (result.status === 'stopped') {
+    return {
+      status: result.status,
+      title: copy.runStopped,
+    }
+  }
+  if (result.status === 'awaiting_review') {
+    return {
+      status: result.status,
+      title: copy.stepStatusAwaitingReview,
+      detail: result.reason,
+    }
+  }
+  if (result.status === 'awaiting_takeover') {
+    return {
+      status: result.status,
+      title: copy.manualTakeoverRequested,
+      detail: result.reason,
+    }
+  }
+
+  return {
+    status: result.status,
+    title: copy.loopGuardStopped,
+    detail: result.reason,
+  }
+}
+
+function notifyRunEnd(
+  onRunEndNotification: ((notification: RunEndNotification) => void) | undefined,
+  notification: RunEndNotification,
+) {
+  try {
+    onRunEndNotification?.(notification)
+  } catch {
+    // Browser notification failures should never interrupt the agent run lifecycle.
+  }
+}
+
+function isCoordinatePreviewAction(action: AgentAction) {
+  return (
+    action.action === 'tap' ||
+    action.action === 'swipe' ||
+    action.action === 'long_press' ||
+    action.action === 'double_tap'
+  )
 }
 
 async function startScreenBlackoutForAutoControl({

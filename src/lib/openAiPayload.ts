@@ -12,6 +12,11 @@ import type {
 } from './openAiTypes'
 import { formatPromptHistoryItem } from './promptContextFormatting'
 import { truncateRetainedText } from './textRetention'
+import {
+  DEFAULT_QWEN_THINKING_BUDGET,
+  isQwenModel,
+  isQwenProvider,
+} from './modelProviders'
 
 export const MAX_PROMPT_CONVERSATION_MESSAGES = 16
 const MAX_PROMPT_OBSERVATION_MESSAGES = 6
@@ -44,9 +49,13 @@ export function buildChatCompletionPayload({
   memoryItems,
   actionTools,
   stream,
+  provider,
+  qwenThinkingBudget,
+  qwenThinkingEnabled,
 }: Pick<
   CompletionRequest,
   | 'model'
+  | 'provider'
   | 'task'
   | 'conversation'
   | 'recalledScreenshots'
@@ -69,6 +78,8 @@ export function buildChatCompletionPayload({
   | 'memoryItems'
   | 'actionTools'
   | 'stream'
+  | 'qwenThinkingEnabled'
+  | 'qwenThinkingBudget'
 >): ChatCompletionPayload {
   const messages: ChatMessage[] = [
     {
@@ -80,6 +91,7 @@ export function buildChatCompletionPayload({
   const context =
     promptContext ??
     buildAgentPromptContext({
+      actionProtocol,
       task,
       history,
       screen,
@@ -124,10 +136,14 @@ export function buildChatCompletionPayload({
     model,
     temperature: 0.1,
     max_tokens: 800,
-    ...(actionProtocol === 'webdroid_json'
-      ? { response_format: { type: 'json_object' as const } }
-      : {}),
-    ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+    response_format: { type: 'json_object' as const },
+    ...modelThinkingPayload({
+      model,
+      provider,
+      reasoningEffort,
+      qwenThinkingEnabled,
+      qwenThinkingBudget,
+    }),
     ...(stream ? { stream: true } : {}),
     messages,
   }
@@ -177,12 +193,7 @@ function capNoisyPromptMessages(messages: readonly AgentConversationMessage[]) {
 
 function looksLikeActionMessage(content: string) {
   const text = content.trim()
-  return (
-    text.startsWith('{') ||
-    text.startsWith('<function_calls>') ||
-    text.startsWith('<think>') ||
-    text.startsWith('<answer>')
-  )
+  return text.startsWith('{')
 }
 
 export function buildFinalResponsePayload({
@@ -195,9 +206,13 @@ export function buildFinalResponsePayload({
   progressSummary,
   reasoningEffort,
   stream,
+  provider,
+  qwenThinkingBudget,
+  qwenThinkingEnabled,
 }: Pick<
   FinalResponseRequest,
   | 'model'
+  | 'provider'
   | 'task'
   | 'conversation'
   | 'history'
@@ -206,6 +221,8 @@ export function buildFinalResponsePayload({
   | 'progressSummary'
   | 'reasoningEffort'
   | 'stream'
+  | 'qwenThinkingEnabled'
+  | 'qwenThinkingBudget'
 >): ChatCompletionPayload {
   const messages: ChatMessage[] = [
     {
@@ -233,10 +250,41 @@ export function buildFinalResponsePayload({
     model,
     temperature: 0.2,
     max_tokens: 700,
-    ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+    ...modelThinkingPayload({
+      model,
+      provider,
+      reasoningEffort,
+      qwenThinkingEnabled,
+      qwenThinkingBudget,
+    }),
     ...(stream ? { stream: true } : {}),
     messages,
   }
+}
+
+function modelThinkingPayload({
+  model,
+  provider,
+  reasoningEffort,
+  qwenThinkingBudget,
+  qwenThinkingEnabled,
+}: Pick<
+  CompletionRequest,
+  'model' | 'provider' | 'reasoningEffort' | 'qwenThinkingEnabled' | 'qwenThinkingBudget'
+>): Pick<ChatCompletionPayload, 'reasoning_effort' | 'enable_thinking' | 'thinking_budget'> {
+  if (isQwenProvider(provider) || (provider === undefined && isQwenModel(model))) {
+    const thinkingEnabled = qwenThinkingEnabled ?? true
+    return {
+      enable_thinking: thinkingEnabled,
+      ...(thinkingEnabled && qwenThinkingBudget !== undefined
+        ? { thinking_budget: qwenThinkingBudget }
+        : thinkingEnabled
+          ? { thinking_budget: DEFAULT_QWEN_THINKING_BUDGET }
+        : {}),
+    }
+  }
+
+  return reasoningEffort ? { reasoning_effort: reasoningEffort } : {}
 }
 
 function buildFinalResponseSystemPrompt() {

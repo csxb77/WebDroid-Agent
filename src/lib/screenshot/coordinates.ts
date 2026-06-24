@@ -1,4 +1,5 @@
 import type { DeviceScreenshot } from '../../adapters/deviceTypes'
+import type { ActionCoordinateMode } from '../actionProtocol'
 import type { AgentAction, ExecutableAtomicAction, ScreenSize } from '../actionTypes'
 
 export const MODEL_SCREENSHOT_MAX_SIDE = 1536
@@ -13,6 +14,7 @@ export type ModelScreenshotView = {
 export type ScreenshotContextInput = {
   modelScreen: ScreenSize
   deviceScreen?: ScreenSize
+  coordinateMode?: ActionCoordinateMode
 }
 
 export function fitDimensionsToMaxSide(
@@ -56,21 +58,26 @@ export function modelScreenshotView(screenshot: DeviceScreenshot): ModelScreensh
 export function buildScreenshotContext({
   modelScreen,
   deviceScreen,
+  coordinateMode = 'screenshot_pixels',
 }: ScreenshotContextInput) {
   const resized =
     deviceScreen !== undefined &&
     (deviceScreen.width !== modelScreen.width || deviceScreen.height !== modelScreen.height)
+  const normalized = coordinateMode === 'normalized_0_1000'
 
   return {
     model_screen_size: `${modelScreen.width}x${modelScreen.height}`,
     ...(deviceScreen
       ? { device_screen_size: `${deviceScreen.width}x${deviceScreen.height}` }
       : {}),
-    coordinate_mode: 'screenshot_pixels',
+    coordinate_mode: coordinateMode,
     coordinate_origin: 'top_left',
+    ...(normalized ? { coordinate_range: '0..1000' } : {}),
     grid_divisions: chooseGridDivisions(modelScreen),
-    grid_labels: 'major_lines_only',
-    execution_mapping: 'model_coordinates_are_mapped_back_to_device_pixels',
+    grid_labels: normalized ? '0_1000_major_lines' : 'major_lines_only',
+    execution_mapping: normalized
+      ? 'normalized_coordinates_are_mapped_to_model_screenshot_pixels_then_device_pixels'
+      : 'model_coordinates_are_mapped_back_to_device_pixels',
     ...(resized ? { resized: true } : {}),
   }
 }
@@ -133,7 +140,11 @@ export function mapActionCoordinates(
 
 function mapPoint(x: number, y: number, fromScreen: ScreenSize, toScreen: ScreenSize) {
   return {
-    x: Math.round((x / fromScreen.width) * toScreen.width),
-    y: Math.round((y / fromScreen.height) * toScreen.height),
+    x: clampCoordinate(Math.round((x / fromScreen.width) * toScreen.width), toScreen.width),
+    y: clampCoordinate(Math.round((y / fromScreen.height) * toScreen.height), toScreen.height),
   }
+}
+
+function clampCoordinate(value: number, axisSize: number) {
+  return Math.min(Math.max(0, axisSize - 1), Math.max(0, value))
 }

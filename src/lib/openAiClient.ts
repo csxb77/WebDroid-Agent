@@ -206,10 +206,6 @@ function buildRepairTask(request: RepairActionRequest) {
     'The previous model action output was invalid. Repair only the action output for the same screenshot and task.',
     `<invalid_action_output>\n${request.invalidOutput}\n</invalid_action_output>`,
     `<validation_error>\n${request.validationError}\n</validation_error>`,
-    request.actionProtocol === 'open_autoglm_function'
-      ? 'Return one corrected Open-AutoGLM <think>...</think><answer>...</answer> action. No markdown.'
-      : request.actionProtocol === 'mobilerun_xml'
-        ? 'Return one corrected mobilerun <function_calls>...</function_calls> tool call block. No markdown.'
-        : 'Return only one corrected canonical JSON action object. No markdown, no prose.',
+    'Return only one corrected canonical JSON action object. No markdown, no prose.',
   ].join('\n')
 }

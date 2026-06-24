@@ -1,6 +1,7 @@
 import type { DeviceScreenTree, DeviceState, InstalledApp } from '../adapters/deviceTypes'
 import type { ActionProtocol } from './actionProtocol'
 import type { CustomToolDescriptor, SecretDescriptor } from './agentResources'
+import type { ModelProviderPreset } from './modelProviders'
 import type { ScreenSize } from './actionTypes'
 import type { ActionToolSignature } from './toolRegistry'
 
@@ -26,7 +27,10 @@ export type ModelConfig = {
   baseUrl: string
   apiKey: string
   model: string
+  provider?: ModelProviderPreset
   reasoningEffort?: ReasoningEffort
+  qwenThinkingEnabled?: boolean
+  qwenThinkingBudget?: number
   stream?: boolean
 }
 
@@ -124,6 +128,8 @@ export type ChatCompletionPayload = {
   temperature: number
   max_tokens: number
   reasoning_effort?: ReasoningEffort
+  enable_thinking?: boolean
+  thinking_budget?: number
   stream?: boolean
   response_format?: {
     type: 'json_object'

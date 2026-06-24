@@ -24,8 +24,7 @@ Docker: browser fetch -> same-origin local proxy -> OpenAI-compatible /v1/chat/c
 - Use the built-in same-origin local API proxy in Docker deployments to avoid model-provider browser CORS limits.
 - Connect to an Android device with USB debugging enabled through WebADB in the browser.
 - Capture the phone screen and send the screenshot, current app, device state, full installed-app list, and step history to the model.
-- Explicitly choose the `webdroid_json`, `open_autoglm_function`, or `mobilerun_xml` action protocol.
-- Use the canonical JSON prompt/action format, while keeping parser compatibility for Open-AutoGLM-style and mobilerun-style action outputs.
+- Use WebDroid JSON-family action protocols and canonical JSON action format: `webdroid_json` uses screenshot pixels, while `webdroid_normalized_json` uses Vision-Pointer-style 0-1000 normalized coordinates.
 - Parse, normalize, and validate the next action returned by the model.
 - Execute app launches, taps, swipes, text input, Back, Home, long press, double tap, and wait actions through ADB, including model-controlled wait duration.
 - Support clear-before-type input, fixed post-action settle delay, transient model API and empty-model-response retries, and limited automatic recovery from non-sensitive execution failures.
@@ -40,8 +39,7 @@ Docker: browser fetch -> same-origin local proxy -> OpenAI-compatible /v1/chat/c
 This project is a good fit for:
 
 - Testing whether an OpenAI-compatible vision model can understand real Android UI.
-- Debugging phone-agent action protocols, coordinate mapping, and auto-execution loops.
-- Exploring compatibility between Open-AutoGLM-style, mobilerun-style, and more general JSON actions.
+- Debugging the phone-agent JSON action format, coordinate mapping, and auto-execution loops.
 - Building Android UI automation prototypes in a local and controlled environment.
 
 It is not a good fit for:
@@ -97,7 +95,7 @@ The app stores these values in the current browser's `localStorage`:
 - `API Key`: model API key.
 - `Model`: model name, default `gpt-5.5`.
 - `Thinking depth`: `reasoning_effort` for reasoning models such as GPT-5.5. Use the provider default, or choose `none`, `minimal`, `low`, `medium`, `high`, or `xhigh`.
-- `Action protocol`: model action protocol, one of `webdroid_json`, `open_autoglm_function`, or `mobilerun_xml`.
+- `Action protocol`: model action protocol. `webdroid_json` uses screenshot pixel coordinates; `webdroid_normalized_json` uses 0-1000 normalized coordinates.
 - `Max steps`: maximum auto-execution steps, default `50`.
 - `Confirm sensitive actions`: whether sensitive taps require human confirmation, default on.
 - `Unrestricted mode`: bypass local safety policy and sensitive confirmations, and prompt the model not to request human takeover.
@@ -154,6 +152,11 @@ The model should return a single JSON object and avoid Markdown or explanatory p
 { "action": "tap", "x": 540, "y": 1280, "reason": "Click the search box" }
 ```
 
+Only WebDroid JSON-family protocols are currently available:
+
+- `webdroid_json`: touch coordinates are pixels in the attached screenshot.
+- `webdroid_normalized_json`: touch coordinates are Vision-Pointer-style 0-1000 normalized coordinates with the top-left origin. They are mapped back to model screenshot pixels, then to native device pixels before execution.
+
 Recommended canonical JSON actions:
 
 | Action | Meaning |
@@ -200,53 +203,6 @@ Examples:
 ```
 
 The legacy compatibility layer still accepts `interact` and `call_api`, but they are not recommended real execution actions. `interact` is converted to `take_over`; `call_api` is converted to `take_over` with an unsupported-second-API-call message.
-
-## mobilerun Compatibility
-
-The parser also accepts common mobilerun-style actions and maps them to real WebDroid execution actions:
-
-| mobilerun style | WebDroid execution |
-| --- | --- |
-| `click_at` / `tap_at` | `tap` |
-| `click_area` / `tap_area` | tap the area center |
-| `long_press_at` | `long_press` |
-| `type_text` / `type_text_direct` | `input_text` |
-| `type_secret` | `type_secret` |
-| `custom_tool` | `custom_tool` |
-| `system_button` / `press_button` | `key` |
-| `open_app` / `open_bundle_id` | `launch` |
-| `remember` | `note` |
-| `complete` | `done` |
-
-`swipe` also accepts `coordinate`, `coordinate2`, and `duration` in seconds. mobilerun-style `coordinate`, `point`, `position`, and `click_area` coordinates are screenshot pixels. Only Open-AutoGLM `element` coordinates keep using the `0-1000` relative coordinate space.
-
-## Open-AutoGLM Compatibility
-
-The parser also accepts Open-AutoGLM-style action names and payloads, including:
-
-- `Launch`
-- `Tap`, including `element: [x, y]` relative coordinates
-- `Type`
-- `Swipe`
-- `Back`
-- `Home`
-- `Long Press`
-- `Double Tap`
-- `Wait`
-- `Take_over`
-- `Interact`, converted to `take_over`
-- `Note`
-- `Call_API`, converted to `take_over` with an unsupported-second-API-call message
-- `type_secret(secret_id="...")`
-- `custom_tool(tool="...")`
-
-It also accepts function-style outputs such as:
-
-```text
-do(action="Launch", app="JD")
-```
-
-Open-AutoGLM coordinates use the `0-1000` relative coordinate space; canonical JSON uses screenshot pixel coordinates. The app maps them back to native device coordinates before execution.
 
 ## Device Control Details
 
@@ -451,5 +407,4 @@ Third-party dependencies remain subject to their own licenses. Please review dep
 ## Related Projects and Community
 
 - [Tango / WebADB](https://github.com/yume-chan/ya-webadb): the browser-side ADB/WebUSB foundation.
-- Open-AutoGLM: an important reference for mobile GUI agent action protocols.
 - Linux.do: an active Chinese tech community centered on AI, software development, resource sharing, and current industry discussion.

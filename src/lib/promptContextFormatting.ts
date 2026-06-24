@@ -5,18 +5,15 @@ import {
 } from '../adapters/installedApps'
 import type { AgentHistoryItem } from './openAiTypes'
 import type { ScreenSize } from './actionTypes'
+import type { ActionProtocol } from './actionProtocol'
+import { coordinateModeForActionProtocol } from './coordinateSystems'
 import { UNKNOWN_APP_NAME } from './deviceState'
 import { buildScreenshotContext } from './screenshot'
 
 export const DEFAULT_INSTALLED_APPS_PROMPT_LIMIT = 40
 
-export const CANONICAL_COORDINATE_INSTRUCTION = [
-  'Coordinates use pixels in the attached screenshot.',
-  'Use numeric x/y labels on major grid lines as anchors; do not answer with grid-cell numbers.',
-  'Your screenshot coordinates are mapped back to native device pixels before execution.',
-].join(' ')
-
 export type PromptScreenInfoInput = {
+  actionProtocol?: ActionProtocol
   currentApp?: string
   deviceScreen?: ScreenSize
   deviceState?: DeviceState
@@ -24,6 +21,7 @@ export type PromptScreenInfoInput = {
 }
 
 export function buildPromptScreenInfo({
+  actionProtocol = 'webdroid_json',
   currentApp,
   deviceScreen,
   deviceState,
@@ -37,7 +35,11 @@ export function buildPromptScreenInfo({
     ...(state.activity ? { activity: state.activity } : {}),
     ...(state.orientation ? { orientation: state.orientation } : {}),
     ...(state.keyboard ? { keyboard: state.keyboard } : {}),
-    ...buildScreenshotContext({ modelScreen: screen, deviceScreen }),
+    ...buildScreenshotContext({
+      modelScreen: screen,
+      deviceScreen,
+      coordinateMode: coordinateModeForActionProtocol(actionProtocol),
+    }),
   })
 }
 

@@ -1,4 +1,9 @@
 import type { ScreenSize } from '../lib/actionTypes'
+import type { ActionCoordinateMode } from '../lib/actionProtocol'
+import {
+  NORMALIZED_COORDINATE_MAX,
+  isNormalizedCoordinateMode,
+} from '../lib/coordinateSystems'
 import {
   chooseGridDivisions,
   fitDimensionsToMaxSide,
@@ -17,6 +22,7 @@ export type ScreenshotPreprocessInput = {
   dataUrl: string
   screen: ScreenSize
   drawGrid?: boolean
+  coordinateMode?: ActionCoordinateMode
   maxSide?: number
   mimeType?: string
   quality?: number
@@ -26,6 +32,7 @@ export async function preprocessScreenshotForModel({
   dataUrl,
   screen,
   drawGrid = true,
+  coordinateMode = 'screenshot_pixels',
   maxSide = MODEL_SCREENSHOT_MAX_SIDE,
   mimeType = MODEL_SCREENSHOT_MIME_TYPE,
   quality = MODEL_SCREENSHOT_QUALITY,
@@ -55,7 +62,7 @@ export async function preprocessScreenshotForModel({
     context.drawImage(image, 0, 0, modelScreen.width, modelScreen.height)
 
     if (drawGrid) {
-      drawCoordinateGrid(context, modelScreen, modelGridDivisions)
+      drawCoordinateGrid(context, modelScreen, modelGridDivisions, coordinateMode)
     }
 
     return {
@@ -153,6 +160,7 @@ function drawCoordinateGrid(
   context: CanvasRenderingContext2D,
   screen: ScreenSize,
   divisions: number,
+  coordinateMode: ActionCoordinateMode,
 ) {
   if (divisions <= 0 || screen.width <= 0 || screen.height <= 0) {
     return
@@ -177,12 +185,27 @@ function drawCoordinateGrid(
     context.stroke()
 
     if (isMajor) {
-      drawLabel(context, `x=${x}`, Math.min(x + 3, Math.max(4, screen.width - 40)), 4)
-      drawLabel(context, `y=${y}`, 4, Math.min(y + 3, Math.max(4, screen.height - 16)))
+      const xLabel = coordinateGridLabelValue(index, divisions, x, coordinateMode)
+      const yLabel = coordinateGridLabelValue(index, divisions, y, coordinateMode)
+      drawLabel(context, `x=${xLabel}`, Math.min(x + 3, Math.max(4, screen.width - 40)), 4)
+      drawLabel(context, `y=${yLabel}`, 4, Math.min(y + 3, Math.max(4, screen.height - 16)))
     }
   }
 
   context.restore()
+}
+
+function coordinateGridLabelValue(
+  index: number,
+  divisions: number,
+  pixelValue: number,
+  coordinateMode: ActionCoordinateMode,
+) {
+  if (isNormalizedCoordinateMode(coordinateMode)) {
+    return Math.round((index * NORMALIZED_COORDINATE_MAX) / divisions)
+  }
+
+  return pixelValue
 }
 
 function drawLabel(context: CanvasRenderingContext2D, text: string, x: number, y: number) {

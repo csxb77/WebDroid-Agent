@@ -28,15 +28,19 @@ describe('settings persistence', () => {
 
   it('loads all persisted setting fields', () => {
     const persisted: AppSettings = {
-      actionProtocol: 'mobilerun_xml',
+      actionProtocol: 'webdroid_json',
       modelConfig: {
         baseUrl: 'https://api.example.com/v1',
         apiKey: 'sk-test',
         model: 'custom-model',
+        provider: 'qwen',
         reasoningEffort: 'high',
+        qwenThinkingEnabled: true,
+        qwenThinkingBudget: 8192,
       },
       maxSteps: 12,
       memoryEnabled: true,
+      taskNotificationsEnabled: true,
       preferAdbKeyboard: true,
       confirmSensitiveActions: false,
       unrestrictedMode: true,
@@ -57,6 +61,19 @@ describe('settings persistence', () => {
         }),
       ),
     ).toEqual(persisted)
+  })
+
+  it('loads the normalized JSON action protocol from persisted settings', () => {
+    expect(
+      loadSettings(
+        memoryStorage({
+          'webdroid-agent-settings': JSON.stringify({
+            ...DEFAULT_SETTINGS,
+            actionProtocol: 'webdroid_normalized_json',
+          }),
+        }),
+      ).actionProtocol,
+    ).toBe('webdroid_normalized_json')
   })
 
   it('keeps old individual keys as migration fallback', () => {
@@ -91,6 +108,74 @@ describe('settings persistence', () => {
     expect(storage.setItem).toHaveBeenCalledWith('webdroid-agent-settings', JSON.stringify(settings))
   })
 
+  it('normalizes Qwen thinking settings with explicit defaults', () => {
+    expect(
+      loadSettings(
+        memoryStorage({
+          'webdroid-agent-settings': JSON.stringify({
+            ...DEFAULT_SETTINGS,
+            modelConfig: {
+              baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+              apiKey: 'sk-test',
+              model: 'qwen3.7-plus',
+              provider: 'qwen',
+              qwenThinkingEnabled: true,
+              qwenThinkingBudget: 8192,
+            },
+          }),
+        }),
+      ).modelConfig,
+    ).toEqual({
+      baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      apiKey: 'sk-test',
+      model: 'qwen3.7-plus',
+      provider: 'qwen',
+      qwenThinkingEnabled: true,
+      qwenThinkingBudget: 8192,
+    })
+
+    expect(
+      loadSettings(
+        memoryStorage({
+          'webdroid-agent-settings': JSON.stringify({
+            ...DEFAULT_SETTINGS,
+            modelConfig: {
+              ...DEFAULT_SETTINGS.modelConfig,
+              provider: 'qwen',
+              qwenThinkingEnabled: 'yes',
+              qwenThinkingBudget: -1,
+            },
+          }),
+        }),
+      ).modelConfig,
+    ).toEqual({
+      ...DEFAULT_SETTINGS.modelConfig,
+      provider: 'qwen',
+      qwenThinkingEnabled: true,
+      qwenThinkingBudget: 300,
+    })
+  })
+
+  it('migrates the legacy qwen3_7_plus provider identifier to qwen', () => {
+    const result = loadSettings(
+      memoryStorage({
+        'webdroid-agent-settings': JSON.stringify({
+          ...DEFAULT_SETTINGS,
+          modelConfig: {
+            ...DEFAULT_SETTINGS.modelConfig,
+            provider: 'qwen3_7_plus',
+            qwenThinkingEnabled: true,
+            qwenThinkingBudget: 8192,
+          },
+        }),
+      }),
+    )
+
+    expect(result.modelConfig.provider).toBe('qwen')
+    expect(result.modelConfig.qwenThinkingEnabled).toBe(true)
+    expect(result.modelConfig.qwenThinkingBudget).toBe(8192)
+  })
+
   it('normalizes new optimization settings when they are missing or invalid', () => {
     expect(
       loadSettings(
@@ -104,6 +189,7 @@ describe('settings persistence', () => {
             actionProtocol: 'invalid-protocol',
             promptMode: 'invalid-mode',
             memoryEnabled: 'yes',
+            taskNotificationsEnabled: 'yes',
             screenBlackoutDuringAutoControl: 'yes',
             streamResponses: 'yes',
             disabledActionTools: ['tap', 'not-a-real-tool', 'tap'],

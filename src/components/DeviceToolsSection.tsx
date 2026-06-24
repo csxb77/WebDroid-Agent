@@ -2,6 +2,7 @@ import {
   AppWindow,
   ClipboardCheck,
   Keyboard,
+  Wrench,
   type LucideIcon,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -15,23 +16,29 @@ import { InstalledAppsDialog } from './InstalledAppsSection'
 export type DeviceToolsSectionProps = {
   actions: DeviceControlActions
   copy: AppCopy
+  sectionId?: string
   state: DeviceControlState
 }
 
-export function DeviceToolsSection({ actions, copy, state }: DeviceToolsSectionProps) {
+export function DeviceToolsSection({ actions, copy, sectionId, state }: DeviceToolsSectionProps) {
   const [installedAppsOpen, setInstalledAppsOpen] = useState(false)
   const isBusy = Boolean(state.busyTask)
+  const toolCount = 3
+  const toolsBadge = summarizeToolsBadge(copy, state.doctorResults, toolCount)
 
   return (
-    <section className="config-panel-group" aria-label={copy.tools}>
-      <div className="panel-title">
-        <ClipboardCheck size={18} />
-        <h2>{copy.tools}</h2>
+    <section className="config-panel-group" id={sectionId} aria-label={copy.tools}>
+      <div className="config-section-heading">
+        <div className="panel-title">
+          <Wrench size={18} />
+          <h2>{copy.tools}</h2>
+        </div>
+        <span className={`config-section-badge ${toolsBadge.tone}`}>{toolsBadge.label}</span>
       </div>
       <div className="home-device-tool-actions">
         <button
           type="button"
-          className="home-device-tool-button"
+          className="home-device-tool-button secondary"
           onClick={actions.onConfigureAdbKeyboard}
           disabled={isBusy || !state.connected}
           title={
@@ -46,7 +53,7 @@ export function DeviceToolsSection({ actions, copy, state }: DeviceToolsSectionP
         </button>
         <button
           type="button"
-          className="home-device-tool-button"
+          className="home-device-tool-button secondary"
           onClick={actions.onRunDoctor}
           disabled={isBusy}
           title={isBusy ? copy.waitForCurrentRun : copy.runDoctor}
@@ -55,7 +62,7 @@ export function DeviceToolsSection({ actions, copy, state }: DeviceToolsSectionP
         </button>
         <button
           type="button"
-          className="home-device-tool-button"
+          className="home-device-tool-button secondary"
           onClick={() => setInstalledAppsOpen(true)}
         >
           <DeviceToolTitle icon={AppWindow} label={copy.installedApps} />
@@ -76,6 +83,22 @@ export function DeviceToolsSection({ actions, copy, state }: DeviceToolsSectionP
       ) : null}
     </section>
   )
+}
+
+function summarizeToolsBadge(
+  copy: AppCopy,
+  results: DeviceControlState['doctorResults'],
+  toolCount: number,
+) {
+  if (results.some((result) => result.status === 'error' || result.status === 'warn')) {
+    return { label: copy.doctorIssues, tone: 'warning' }
+  }
+
+  if (results.some((result) => result.status === 'ok')) {
+    return { label: copy.doctorChecksOk, tone: 'ready' }
+  }
+
+  return { label: copy.toolsSummary(toolCount), tone: 'count' }
 }
 
 type DeviceToolTitleProps = {

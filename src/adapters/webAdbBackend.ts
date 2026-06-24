@@ -23,6 +23,7 @@ import {
   type DeviceBackend,
   type DeviceInfo,
   type DeviceScreenshot,
+  type DeviceScreenshotOptions,
   type DeviceState,
   type DeviceTimingConfig,
   type ExecuteActionOptions,
@@ -138,8 +139,8 @@ export class WebAdbDeviceBackend implements DeviceBackend {
     this.#clipboardText = null
   }
 
-  async screenshot(): Promise<DeviceScreenshot> {
-    return retryDeviceOperation(() => this.#readScreenshot(), {
+  async screenshot(options?: DeviceScreenshotOptions): Promise<DeviceScreenshot> {
+    return retryDeviceOperation(() => this.#readScreenshot(options), {
       label: 'screenshot',
       recoverAfterAttempt: DEVICE_READ_RECOVER_AFTER_ATTEMPT,
       recover: () => this.#recoverDeviceRead(),
@@ -191,7 +192,7 @@ export class WebAdbDeviceBackend implements DeviceBackend {
     return this.#installedApps
   }
 
-  async #readScreenshot(): Promise<DeviceScreenshot> {
+  async #readScreenshot(options?: DeviceScreenshotOptions): Promise<DeviceScreenshot> {
     const adb = this.#requireAdb()
     const bytes = await adb.subprocess.noneProtocol.spawnWait(['screencap', '-p'])
     const screen = parsePngSize(bytes)
@@ -201,7 +202,11 @@ export class WebAdbDeviceBackend implements DeviceBackend {
     const imageUrl = createImageObjectUrl(bytes)
 
     try {
-      modelScreenshot = await preprocessScreenshotForModel({ dataUrl: imageUrl, screen })
+      modelScreenshot = await preprocessScreenshotForModel({
+        dataUrl: imageUrl,
+        screen,
+        coordinateMode: options?.coordinateMode,
+      })
     } catch {
       const dataUrl = bytesToDataUrl(bytes)
       modelScreenshot = { modelDataUrl: dataUrl, modelScreen: screen }

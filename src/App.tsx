@@ -15,24 +15,7 @@ import type { AgentAction } from './lib/actionTypes'
 import { createOpenAiClient } from './lib/openAiClient'
 import type { ModelConfig } from './lib/openAiTypes'
 import { APP_COPY, resolveLocale } from './lib/appCopy'
-import {
-  createDefaultAppCards,
-  loadAppCards,
-  parseAppCardsJson,
-  saveAppCards,
-  serializeAppCards,
-} from './lib/appCards'
 import type { ActionProtocol } from './lib/actionProtocol'
-import {
-  loadCustomToolDefinitions,
-  loadSecretRecords,
-  parseCustomToolDefinitionsJson,
-  parseSecretRecordsJson,
-  saveCustomToolDefinitions,
-  saveSecretRecords,
-  serializeCustomToolDefinitions,
-  serializeSecretRecords,
-} from './lib/agentResources'
 import { useAgentRunController } from './hooks/useAgentRunController'
 import { useConfigTargetScroll } from './hooks/useConfigTargetScroll'
 import { useDeviceController } from './hooks/useDeviceController'
@@ -40,6 +23,7 @@ import { useAgentSessionHistory } from './hooks/useAgentSessionHistory'
 import { useBusyTask } from './hooks/useBusyTask'
 import { useBusyTaskDocumentTitle } from './hooks/useBusyTaskDocumentTitle'
 import { useDocumentPreferences } from './hooks/useDocumentPreferences'
+import { useLocalResourcesState } from './hooks/useLocalResourcesState'
 import { usePersistedSettings } from './hooks/usePersistedSettings'
 import { useRepositoryStats } from './hooks/useRepositoryStats'
 import { useRunLog } from './hooks/useRunLog'
@@ -48,6 +32,11 @@ import { OPENAI_PROXY_URL } from './lib/openAiRuntimeConfig'
 import { loadSettings, normalizeMaxSteps, type AppSettings } from './lib/settings'
 import { createDefaultActionToolRegistry, type ActionToolName } from './lib/toolRegistry'
 import { loadMemoryItems, rememberMemoryItem, saveMemoryItems } from './lib/memory'
+import {
+  requestTaskNotificationPermission,
+  showTaskNotification,
+} from './lib/taskNotifications'
+import { AppProvider } from './components/AppContext'
 import { AppTopbar } from './components/AppTopbar'
 import { ConfigSidebar } from './components/ConfigSidebar'
 import { DeviceQuickControls } from './components/DeviceQuickControls'
@@ -81,19 +70,21 @@ function App() {
     () => createDefaultActionToolRegistry(disabledActionTools),
     [disabledActionTools],
   )
-  const [appCards, setAppCards] = useState(() => loadAppCards())
-  const [appCardsJson, setAppCardsJson] = useState(() => serializeAppCards(appCards))
-  const [appCardsJsonError, setAppCardsJsonError] = useState<string | null>(null)
-  const [secretRecords, setSecretRecords] = useState(() => loadSecretRecords())
-  const [secretRecordsJson, setSecretRecordsJson] = useState(() =>
-    serializeSecretRecords(secretRecords),
-  )
-  const [secretRecordsJsonError, setSecretRecordsJsonError] = useState<string | null>(null)
-  const [customTools, setCustomTools] = useState(() => loadCustomToolDefinitions())
-  const [customToolsJson, setCustomToolsJson] = useState(() =>
-    serializeCustomToolDefinitions(customTools),
-  )
-  const [customToolsJsonError, setCustomToolsJsonError] = useState<string | null>(null)
+  const {
+    appCards,
+    appCardsJson,
+    appCardsJsonError,
+    customTools,
+    customToolsJson,
+    customToolsJsonError,
+    resetAppCards,
+    secretRecords,
+    secretRecordsJson,
+    secretRecordsJsonError,
+    updateAppCardsJson,
+    updateCustomToolsJson,
+    updateSecretRecordsJson,
+  } = useLocalResourcesState()
   const [historySidebarOpen, setHistorySidebarOpen] = useState(false)
   const [modelConfig, setModelConfig] = useState<ModelConfig>(settings.modelConfig)
   const [chatInput, setChatInput] = useState('')
@@ -104,6 +95,9 @@ function App() {
     settings.screenBlackoutDuringAutoControl,
   )
   const [streamResponses, setStreamResponses] = useState(settings.streamResponses)
+  const [taskNotificationsEnabled, setTaskNotificationsEnabled] = useState(
+    settings.taskNotificationsEnabled,
+  )
   const [themeMode, setThemeMode] = useState(settings.themeMode)
   const [languageMode, setLanguageMode] = useState(settings.languageMode)
   const [configSidebarOpen, setConfigSidebarOpen] = useState(true)
@@ -168,6 +162,7 @@ function App() {
       modelConfig,
       maxSteps,
       memoryEnabled,
+      taskNotificationsEnabled,
       preferAdbKeyboard,
       confirmSensitiveActions,
       unrestrictedMode,
@@ -194,6 +189,7 @@ function App() {
       preferAdbKeyboard,
       screenBlackoutDuringAutoControl,
       streamResponses,
+      taskNotificationsEnabled,
       themeMode,
       unrestrictedMode,
     ],
@@ -217,9 +213,6 @@ function App() {
       document.body.style.overscrollBehavior = previousOverscrollBehavior
     }
   }, [modalOverlayOpen])
-  useEffect(() => saveAppCards(appCards), [appCards])
-  useEffect(() => saveSecretRecords(secretRecords), [secretRecords])
-  useEffect(() => saveCustomToolDefinitions(customTools), [customTools])
   const rememberMemory = useCallback((information: string) => {
     setMemoryItems((current) => {
       const next = rememberMemoryItem(current, information)
@@ -227,6 +220,31 @@ function App() {
       return next
     })
   }, [])
+  const handleTaskNotificationsEnabledChange = useCallback(
+    async (enabled: boolean) => {
+      if (!enabled) {
+        setTaskNotificationsEnabled(false)
+        return
+      }
+
+      const permission = await requestTaskNotificationPermission()
+      setTaskNotificationsEnabled(permission === 'granted')
+    },
+    [],
+  )
+  const handleRunEndNotification = useCallback(
+    (notification: { title: string; detail?: string }) => {
+      if (!taskNotificationsEnabled) {
+        return
+      }
+
+      showTaskNotification({
+        title: notification.title,
+        detail: notification.detail,
+      })
+    },
+    [taskNotificationsEnabled],
+  )
   useEffect(
     () => () => {
       sensitiveActionResolverRef.current?.(false)
@@ -253,7 +271,12 @@ function App() {
     initialSettings: settings,
     onSessionStateChange: device.applySessionDeviceState,
   })
-  const { executePendingStep, stopCurrentRun, submitChatMessage } = useAgentRunController({
+  const {
+    executePendingStep,
+    queuedChatMessageCount,
+    stopCurrentRun,
+    submitChatMessage,
+  } = useAgentRunController({
     actionToolRegistry,
     actionProtocol,
     addLog,
@@ -272,6 +295,7 @@ function App() {
     memoryItems,
     modelConfig,
     onMemoryItem: rememberMemory,
+    onRunEndNotification: handleRunEndNotification,
     pendingStep,
     runTask,
     setChatInput,
@@ -292,46 +316,6 @@ function App() {
 
   function updateMaxSteps(value: number) {
     setMaxSteps((current) => normalizeMaxSteps(value, current))
-  }
-
-  function updateAppCardsJson(value: string) {
-    setAppCardsJson(value)
-    try {
-      const nextAppCards = parseAppCardsJson(value)
-      setAppCards(nextAppCards)
-      setAppCardsJsonError(null)
-    } catch (caught) {
-      setAppCardsJsonError(caught instanceof Error ? caught.message : String(caught))
-    }
-  }
-
-  function resetAppCards() {
-    const nextAppCards = createDefaultAppCards()
-    setAppCards(nextAppCards)
-    setAppCardsJson(serializeAppCards(nextAppCards))
-    setAppCardsJsonError(null)
-  }
-
-  function updateSecretRecordsJson(value: string) {
-    setSecretRecordsJson(value)
-    try {
-      const nextSecrets = parseSecretRecordsJson(value)
-      setSecretRecords(nextSecrets)
-      setSecretRecordsJsonError(null)
-    } catch (caught) {
-      setSecretRecordsJsonError(caught instanceof Error ? caught.message : String(caught))
-    }
-  }
-
-  function updateCustomToolsJson(value: string) {
-    setCustomToolsJson(value)
-    try {
-      const nextTools = parseCustomToolDefinitionsJson(value)
-      setCustomTools(nextTools)
-      setCustomToolsJsonError(null)
-    } catch (caught) {
-      setCustomToolsJsonError(caught instanceof Error ? caught.message : String(caught))
-    }
   }
 
   function startNewChat() {
@@ -405,14 +389,14 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
-      <AppTopbar
-        copy={copy}
-        currentApp={device.currentApp}
-        isTutorialOpen={tutorialOpen}
-        onOpenSettings={openSettings}
-        onToggleTutorial={toggleTutorial}
-      />
+    <AppProvider value={{ copy, locale: activeLocale }}>
+      <main className="app-shell">
+        <AppTopbar
+          currentApp={device.currentApp}
+          isTutorialOpen={tutorialOpen}
+          onOpenSettings={openSettings}
+          onToggleTutorial={toggleTutorial}
+        />
 
       <Suspense fallback={null}>
         {settingsOpen ? (
@@ -424,6 +408,7 @@ function App() {
             customToolsJsonError={customToolsJsonError}
             languageMode={languageMode}
             maxSteps={maxSteps}
+            taskNotificationsEnabled={taskNotificationsEnabled}
             disabledActionTools={disabledActionTools}
             onAppCardsJsonChange={updateAppCardsJson}
             onCustomToolsJsonChange={updateCustomToolsJson}
@@ -437,6 +422,9 @@ function App() {
             onMaxStepsChange={updateMaxSteps}
             onResetAppCards={resetAppCards}
             onSecretRecordsJsonChange={updateSecretRecordsJson}
+            onTaskNotificationsEnabledChange={(value) => {
+              void handleTaskNotificationsEnabledChange(value)
+            }}
             onThemeModeChange={setThemeMode}
             repositoryStats={repositoryStats}
             repositoryStatsStatus={repositoryStatsStatus}
@@ -474,7 +462,6 @@ function App() {
         }
       >
         <ConfigSidebar
-          copy={copy}
           deviceActions={device.actions}
           deviceOptions={device.options}
           deviceState={device.state}
@@ -495,10 +482,14 @@ function App() {
 
         <div className="phone-column">
           <PhoneStage
+            busyTask={busyTask}
             copy={copy}
             displayedScreenshot={device.displayedScreenshot}
             onRunInteractiveAction={device.runScreenshotAction}
             pendingStep={pendingStep}
+            runningAgent={Boolean(
+              busyTask?.id === 'run-agent' || (device.state?.currentApp != null && pendingStep != null),
+            )}
           />
           <DeviceQuickControls
             busyTask={busyTask}
@@ -514,7 +505,6 @@ function App() {
           chatInput={chatInput}
           conversation={conversation}
           interactionItems={interactionItems}
-          copy={copy}
           historySidebarOpen={historySidebarOpen}
           sessionSummary={sessionSummary}
           onChatInputChange={setChatInput}
@@ -531,6 +521,7 @@ function App() {
           onSubmitChatMessage={submitChatMessage}
           onToggleHistorySidebar={() => setHistorySidebarOpen((current) => !current)}
           pendingStep={pendingStep}
+          queuedChatMessageCount={queuedChatMessageCount}
           threadSummaries={threadSummaries}
         />
       </section>
@@ -566,6 +557,7 @@ function App() {
         ) : null}
       </details>
     </main>
+    </AppProvider>
   )
 }
 

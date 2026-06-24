@@ -34,7 +34,8 @@
 }
 
 .panel-title-action:hover:not(:disabled) {
-  transform: translateY(-1px);
+  background: var(--button-bg-hover);
+  border-color: var(--border-strong);
 }
 
 .pending-action {

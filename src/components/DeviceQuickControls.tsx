@@ -1,5 +1,5 @@
 import { ArrowLeft, CornerDownLeft, Home, Keyboard } from 'lucide-react'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import type { AgentAction } from '../lib/actionTypes'
 import type { AppCopy } from '../lib/appCopy'
 import type { BusyTask } from '../lib/busyTask'
@@ -19,6 +19,7 @@ export function DeviceQuickControls({
   copy,
   onRunDirectAction,
 }: DeviceQuickControlsProps) {
+  const directTextInputId = useId()
   const [directText, setDirectText] = useState('')
   const directDisabled = Boolean(busyTask) || !connected
 
@@ -28,9 +29,12 @@ export function DeviceQuickControls({
       className={['device-quick-controls', className].filter(Boolean).join(' ')}
     >
       <div className="direct-text-row">
-        <label>
+        <label htmlFor={directTextInputId}>
           {copy.directText}
           <input
+            id={directTextInputId}
+            autoComplete="off"
+            name="directText"
             type="text"
             value={directText}
             onChange={(event) => setDirectText(event.target.value)}

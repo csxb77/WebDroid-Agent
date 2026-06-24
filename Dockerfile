@@ -1,10 +1,10 @@
-FROM node:22-alpine AS deps
+FROM node:22-bookworm-slim AS deps
 
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
-FROM node:22-alpine AS build
+FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -12,7 +12,7 @@ COPY . .
 ENV VITE_OPENAI_PROXY_URL=/api/openai/chat/completions
 RUN npm run build
 
-FROM node:22-alpine AS runner
+FROM node:22-bookworm-slim AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production

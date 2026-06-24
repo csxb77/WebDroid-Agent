@@ -147,7 +147,7 @@
 }
 
 .chat-stream::-webkit-scrollbar-thumb:hover {
-  background: var(--accent);
+  background: var(--border-strong);
 }
 
 .chat-empty-state {
@@ -167,21 +167,19 @@
 
 .chat-empty-icon {
   align-items: center;
-  animation: float 3s ease-in-out infinite;
-  background: var(--gradient-accent);
-  border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-accent);
-  color: var(--on-primary);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-border);
+  border-radius: var(--radius-xl);
+  color: var(--accent);
   display: flex;
-  height: 72px;
+  height: 56px;
   justify-content: center;
-  width: 72px;
+  width: 56px;
 }
 
 .chat-empty-icon svg {
-  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.15));
-  height: 36px;
-  width: 36px;
+  height: 26px;
+  width: 26px;
 }
 
 .chat-empty-state strong {
@@ -295,9 +293,8 @@
 }
 
 .chat-scroll-bottom:hover:not(:disabled) {
-  box-shadow: var(--shadow-accent);
+  border-color: var(--border-strong);
   color: var(--accent);
-  transform: scale(1.08);
 }
 
 @keyframes spin {

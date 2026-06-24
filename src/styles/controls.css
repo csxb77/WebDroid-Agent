@@ -25,12 +25,9 @@
 .button:hover:not(:disabled) {
   background: var(--button-bg-hover);
   border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
 }
 
 .button:active:not(:disabled) {
-  transform: translateY(0);
   box-shadow: var(--shadow-xs);
 }
 
@@ -53,10 +50,8 @@
 }
 
 .button--primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--primary), var(--primary-hover)), var(--primary-hover));
+  background: var(--primary-hover);
   border-color: transparent;
-  box-shadow: var(--shadow-primary-sm);
-  transform: translateY(-1px);
 }
 
 .button--secondary {

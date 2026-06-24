@@ -12,11 +12,11 @@ describe('actionAliases', () => {
     expect(normalizeActionName('repeat-action')).toBe('repeat_action')
   })
 
-  it('returns canonical action names for model-specific aliases', () => {
-    expect(canonicalActionName('Click At')).toBe('tap')
-    expect(canonicalActionName('repeat-action')).toBe('repeat')
+  it('normalizes canonical action names without mapping removed protocol aliases', () => {
+    expect(canonicalActionName('Click At')).toBe('click_at')
+    expect(canonicalActionName('repeat-action')).toBe('repeat_action')
     expect(canonicalActionName('Open URL')).toBe('open_url')
-    expect(canonicalActionName('recall screenshot')).toBe('view_screenshot')
+    expect(canonicalActionName('view screenshot')).toBe('view_screenshot')
   })
 
   it('normalizes supported Android key aliases', () => {

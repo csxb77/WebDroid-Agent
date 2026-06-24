@@ -24,140 +24,95 @@ describe('parseModelAction', () => {
     expect(() => parseModelAction('tap the center of the screen')).toThrow(ActionValidationError)
   })
 
-  it('normalizes Open-AutoGLM JSON actions with relative element coordinates', () => {
-    const action = parseModelAction(
-      '{"_metadata":"do","action":"Tap","element":[500,100],"thought":"press search","message":"重要操作"}',
-      screen,
+  it('rejects function-style model responses', () => {
+    expect(() => parseModelAction('<answer>do(action="Launch", app="京东")</answer>')).toThrow(
+      ActionValidationError,
     )
+    expect(() => parseModelAction('complete(success=False, message="没有找到目标")')).toThrow(
+      ActionValidationError,
+    )
+  })
 
-    expect(action).toEqual({
+  it('rejects XML tool call responses', () => {
+    expect(
+      () =>
+        parseModelAction(
+          [
+            '<function_calls>',
+            '<invoke name="click_at">',
+            '<parameter name="x">100</parameter>',
+            '<parameter name="y">200</parameter>',
+            '</invoke>',
+            '</function_calls>',
+          ].join(''),
+          screen,
+        ),
+    ).toThrow(ActionValidationError)
+  })
+
+  it('rejects JSON objects that use removed protocol coordinates', () => {
+    expect(() =>
+      parseModelAction(
+        '{"_metadata":"do","action":"Tap","element":[500,100],"thought":"press search"}',
+        screen,
+      ),
+    ).toThrow('Action must include x/y coordinates')
+  })
+
+  it('maps normalized 0-1000 touch coordinates to screenshot pixels', () => {
+    expect(
+      parseModelAction(
+        '{"action":"tap","x":500,"y":1000,"reason":"open bottom"}',
+        screen,
+        'webdroid_normalized_json',
+      ),
+    ).toEqual({
       action: 'tap',
       x: 540,
-      y: 240,
-      reason: 'press search',
-      message: '重要操作',
+      y: 2399,
+      reason: 'open bottom',
     })
   })
 
-  it('parses Open-AutoGLM function style actions', () => {
-    const action = parseModelAction('<answer>do(action="Launch", app="京东")</answer>')
-
-    expect(action).toEqual({
-      action: 'launch',
-      app: '京东',
-    })
-  })
-
-  it('parses Open-AutoGLM finish function style actions', () => {
-    const action = parseModelAction('<think>完成了</think><answer>finish(message="已完成任务")</answer>')
-
-    expect(action).toEqual({
-      action: 'done',
-      summary: '已完成任务',
-    })
-  })
-
-  it('parses mobilerun function style actions', () => {
-    expect(parseModelAction('<answer>click_at(x=100, y=200)</answer>', screen)).toEqual({
-      action: 'tap',
-      x: 100,
-      y: 200,
-    })
-    expect(parseModelAction('complete(success=False, message="没有找到目标")', screen)).toEqual({
-      action: 'done',
-      summary: 'Failed: 没有找到目标',
-    })
-  })
-
-  it('parses mobilerun XML tool calls', () => {
+  it('maps normalized composite touch actions to screenshot pixels', () => {
     expect(
       parseModelAction(
-        [
-          '<function_calls>',
-          '<invoke name="click_at">',
-          '<parameter name="x">100</parameter>',
-          '<parameter name="y">200</parameter>',
-          '</invoke>',
-          '</function_calls>',
-        ].join(''),
+        JSON.stringify({
+          action: 'sequence',
+          actions: [
+            { action: 'tap', x: 250, y: 500 },
+            { action: 'swipe', fromX: 500, fromY: 900, toX: 500, toY: 100 },
+          ],
+          reason: 'tap and scroll',
+        }),
         screen,
-      ),
-    ).toEqual({
-      action: 'tap',
-      x: 100,
-      y: 200,
-    })
-
-    expect(
-      parseModelAction(
-        [
-          '<function_calls>',
-          '<invoke name="custom_tool">',
-          '<parameter name="tool">lookup_order</parameter>',
-          '<parameter name="input">{"id":"123"}</parameter>',
-          '</invoke>',
-          '</function_calls>',
-        ].join(''),
-        screen,
-      ),
-    ).toEqual({
-      action: 'custom_tool',
-      tool: 'lookup_order',
-      input: { id: '123' },
-    })
-
-    expect(
-      parseModelAction(
-        [
-          '<function_calls>',
-          '<invoke name="view_screenshot">',
-          '<parameter name="ref">step-7</parameter>',
-          '</invoke>',
-          '</function_calls>',
-        ].join(''),
-        screen,
-      ),
-    ).toEqual({
-      action: 'view_screenshot',
-      ref: 'step-7',
-    })
-  })
-
-  it('parses multiple mobilerun XML invokes as one sequence action', () => {
-    expect(
-      parseModelAction(
-        [
-          '<function_calls>',
-          '<invoke name="click_at">',
-          '<parameter name="x">100</parameter>',
-          '<parameter name="y">200</parameter>',
-          '</invoke>',
-          '<invoke name="type_text">',
-          '<parameter name="text">hello</parameter>',
-          '<parameter name="clear">true</parameter>',
-          '</invoke>',
-          '</function_calls>',
-        ].join(''),
-        screen,
+        'webdroid_normalized_json',
       ),
     ).toEqual({
       action: 'sequence',
       actions: [
-        { action: 'tap', x: 100, y: 200 },
-        { action: 'input_text', text: 'hello', clear: true },
+        { action: 'tap', x: 270, y: 1200 },
+        {
+          action: 'swipe',
+          fromX: 540,
+          fromY: 2159,
+          toX: 540,
+          toY: 240,
+          durationMs: 400,
+        },
       ],
+      reason: 'tap and scroll',
     })
   })
 
-  it('normalizes Open-AutoGLM Interact and Call_API actions to takeover', () => {
-    expect(parseModelAction('do(action="Interact", message="请选择联系人")', screen)).toEqual({
-      action: 'take_over',
-      message: '请选择联系人',
-    })
-    expect(parseModelAction('do(action="Call_API", instruction="总结已记录页面")', screen)).toEqual({
-      action: 'take_over',
-      message: 'Unsupported call_api requested: 总结已记录页面',
-    })
+  it('rejects normalized touch coordinates outside 0-1000', () => {
+    expect(() =>
+      parseModelAction(
+        '{"action":"tap","x":1001,"y":500}',
+        screen,
+        'webdroid_normalized_json',
+      ),
+    ).toThrow('normalized 0-1000 coordinate range')
   })
 })
 
@@ -200,11 +155,11 @@ describe('validateAction', () => {
       action: 'view_screenshot',
       ref: '#4',
     })
-    expect(validateAction({ action: 'recall_screenshot', step: '5' }, screen)).toEqual({
+    expect(validateAction({ action: 'view_screenshot', step: '5' }, screen)).toEqual({
       action: 'view_screenshot',
       step: 5,
     })
-    expect(parseModelAction('view_screenshot(ref="step-6")', screen)).toEqual({
+    expect(parseModelAction('{"action":"view_screenshot","ref":"step-6"}', screen)).toEqual({
       action: 'view_screenshot',
       ref: 'step-6',
     })
@@ -222,7 +177,7 @@ describe('validateAction', () => {
       text: 'hello',
       clear: true,
     })
-    expect(parseModelAction('do(action="Type", text="hello", clear=True)', screen)).toEqual({
+    expect(parseModelAction('{"action":"input_text","text":"hello","clear":true}', screen)).toEqual({
       action: 'input_text',
       text: 'hello',
       clear: true,
@@ -234,7 +189,7 @@ describe('validateAction', () => {
       action: 'open_url',
       url: 'https://example.com/search?q=webdroid',
     })
-    expect(parseModelAction('do(action="Open URL", url="myapp://detail/123")')).toEqual({
+    expect(parseModelAction('{"action":"open_url","url":"myapp://detail/123"}')).toEqual({
       action: 'open_url',
       url: 'myapp://detail/123',
     })
@@ -293,8 +248,14 @@ describe('validateAction', () => {
         {
           action: 'repeat',
           count: 3,
-          actionToRepeat: { action: 'swipe', direction: 'up' },
-          delay: 0.25,
+          actionToRepeat: {
+            action: 'swipe',
+            fromX: 540,
+            fromY: 1800,
+            toX: 540,
+            toY: 600,
+          },
+          delayMs: 250,
         },
         screen,
       ),
@@ -365,24 +326,20 @@ describe('validateAction', () => {
     })
   })
 
-  it('supports Open-AutoGLM Launch, Type, Back, Home, Long Press, Double Tap, and Take_over', () => {
+  it('accepts canonical control actions', () => {
     expect(validateAction({ action: 'Launch', app: 'Settings' }, screen)).toEqual({
       action: 'launch',
       app: 'Settings',
     })
-    expect(validateAction({ action: 'Type', text: 'hello' }, screen)).toEqual({
-      action: 'input_text',
-      text: 'hello',
-    })
     expect(validateAction({ action: 'Back' }, screen)).toEqual({ action: 'back' })
     expect(validateAction({ action: 'Home' }, screen)).toEqual({ action: 'home' })
-    expect(validateAction({ action: 'Long Press', element: [500, 500] }, screen)).toEqual({
+    expect(validateAction({ action: 'Long Press', x: 540, y: 1200 }, screen)).toEqual({
       action: 'long_press',
       x: 540,
       y: 1200,
       durationMs: 800,
     })
-    expect(validateAction({ action: 'Double Tap', element: [250, 750] }, screen)).toEqual({
+    expect(validateAction({ action: 'Double Tap', x: 270, y: 1800 }, screen)).toEqual({
       action: 'double_tap',
       x: 270,
       y: 1800,
@@ -397,91 +354,27 @@ describe('validateAction', () => {
     })
   })
 
-  it('turns direction swipes into screen-relative coordinates', () => {
-    expect(validateAction({ action: 'Swipe', direction: 'up' }, screen)).toEqual({
-      action: 'swipe',
-      fromX: 540,
-      fromY: 1800,
-      toX: 540,
-      toY: 600,
-      durationMs: 400,
-    })
-  })
-
-  it('accepts mobilerun action aliases with screenshot pixel coordinates', () => {
-    expect(validateAction({ action: 'click_at', x: 100, y: 200 }, screen)).toEqual({
-      action: 'tap',
-      x: 100,
-      y: 200,
-    })
-    expect(
-      validateAction({ action: 'click_area', x1: 100, y1: 200, x2: 300, y2: 400 }, screen),
-    ).toEqual({
-      action: 'tap',
-      x: 200,
-      y: 300,
-    })
-    expect(validateAction({ action: 'tap', coordinate: [100, 200] }, screen)).toEqual({
-      action: 'tap',
-      x: 100,
-      y: 200,
-    })
-    expect(validateAction({ action: 'long_press_at', x: 100, y: 200 }, screen)).toEqual({
-      action: 'long_press',
-      x: 100,
-      y: 200,
-      durationMs: 1000,
-    })
-    expect(
-      validateAction(
-        { action: 'swipe', coordinate: [100, 200], coordinate2: [300, 400], duration: 1.5 },
-        screen,
-      ),
-    ).toEqual({
-      action: 'swipe',
-      fromX: 100,
-      fromY: 200,
-      toX: 300,
-      toY: 400,
-      durationMs: 1500,
-    })
-    expect(
-      validateAction({ action: 'swipe', coordinate: [100, 200], coordinate2: [300, 400] }, screen),
-    ).toEqual({
-      action: 'swipe',
-      fromX: 100,
-      fromY: 200,
-      toX: 300,
-      toY: 400,
-      durationMs: 1000,
-    })
-    expect(validateAction({ action: 'type_text', text: 'hello', clear: true }, screen)).toEqual({
-      action: 'input_text',
-      text: 'hello',
-      clear: true,
-    })
-    expect(validateAction({ action: 'type_secret', secret_id: 'gmail', clear: true }, screen)).toEqual({
-      action: 'type_secret',
-      secretId: 'gmail',
-      clear: true,
-    })
-    expect(validateAction({ action: 'system_button', button: 'recent apps' }, screen)).toEqual({
-      action: 'key',
-      key: 'APP_SWITCH',
-    })
-    expect(validateAction({ action: 'open_app', text: 'Gmail' }, screen)).toEqual({
-      action: 'launch',
-      app: 'Gmail',
-    })
-    expect(validateAction({ action: 'remember', information: '账号页已打开' }, screen)).toEqual({
-      action: 'note',
-      message: '账号页已打开',
-    })
-    expect(validateAction({ action: 'complete', success: true, message: '已完成' }, screen)).toEqual(
-      {
-        action: 'done',
-        summary: '已完成',
-      },
+  it('rejects removed protocol aliases and coordinate payloads', () => {
+    expect(() => validateAction({ action: 'click_at', x: 100, y: 200 }, screen)).toThrow(
+      'Unsupported action',
+    )
+    expect(() => validateAction({ action: 'tap', coordinate: [100, 200] }, screen)).toThrow(
+      'x/y coordinates',
+    )
+    expect(() => validateAction({ action: 'swipe', direction: 'up' }, screen)).toThrow(
+      'fromX/fromY/toX/toY',
+    )
+    expect(() => validateAction({ action: 'type_text', text: 'hello' }, screen)).toThrow(
+      'Unsupported action',
+    )
+    expect(() => validateAction({ action: 'system_button', button: 'recent apps' }, screen)).toThrow(
+      'Unsupported action',
+    )
+    expect(() => validateAction({ action: 'open_app', text: 'Gmail' }, screen)).toThrow(
+      'Unsupported action',
+    )
+    expect(() => validateAction({ action: 'remember', information: '账号页已打开' }, screen)).toThrow(
+      'Unsupported action',
     )
     expect(validateAction({ action: 'custom_tool', tool: 'lookup_order' }, screen)).toEqual({
       action: 'custom_tool',

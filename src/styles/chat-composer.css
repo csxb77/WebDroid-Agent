@@ -108,10 +108,8 @@
 }
 
 .chat-send.button--primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent), var(--accent-hover)), var(--accent-hover));
+  background: var(--accent-hover);
   border-color: transparent;
-  box-shadow: var(--shadow-accent);
-  transform: scale(1.06);
 }
 
 .chat-send.button--primary:disabled {
