@@ -110,7 +110,9 @@ export function useAgentRunController({
   unrestrictedMode,
 }: UseAgentRunControllerInput) {
   const abortRef = useRef<AbortController | null>(null)
+  const pendingAbortRef = useRef<AbortController | null>(null)
   const flushingQueuedMessageRef = useRef(false)
+  const queuedMessagesRef = useRef<string[]>([])
   const [queuedChatMessages, setQueuedChatMessages] = useState<string[]>([])
 
   const executePendingStep = useCallback(async () => {
@@ -118,7 +120,11 @@ export function useAgentRunController({
       return
     }
 
+    const pendingAbort = new AbortController()
+    pendingAbortRef.current = pendingAbort
+
     await runTask('execute-action', copy.executeActionTask, async () => {
+      try {
       if (pendingStep.action.action === 'done') {
         recordAgentStep(ensureSession(), pendingStep, undefined, undefined, {
           memoryEnabled,
@@ -129,6 +135,7 @@ export function useAgentRunController({
           modelConfig: { ...modelConfig, stream: streamResponses },
           session: ensureSession(),
           task: ensureSession().task,
+          signal: pendingAbort.signal,
         })
         addLog({ tone: 'ok', title: copy.taskComplete, detail: finalResponse })
         recordThreadStatus(ensureSession(), 'done', finalResponse)
@@ -161,6 +168,7 @@ export function useAgentRunController({
         customTools,
         secrets,
         screenshotRecallThread: ensureSession(),
+        signal: pendingAbort.signal,
       })
       recordAgentStepExecutionDuration(pendingStep, performance.now() - executionStartedAt)
       pendingStep.toolName = result.toolName
@@ -190,6 +198,11 @@ export function useAgentRunController({
       setPendingStep(null)
       await device.refreshDisplayedSnapshot()
       syncConversation()
+      } finally {
+        if (pendingAbortRef.current === pendingAbort) {
+          pendingAbortRef.current = null
+        }
+      }
     })
   }, [
     actionToolRegistry,
@@ -382,7 +395,8 @@ export function useAgentRunController({
     setChatInput('')
 
     if (busyTask) {
-      setQueuedChatMessages((current) => [...current, message])
+      queuedMessagesRef.current = [...queuedMessagesRef.current, message]
+      setQueuedChatMessages([...queuedMessagesRef.current])
       addLog({ tone: 'info', title: copy.userMessageQueued, detail: message })
       return
     }
@@ -397,37 +411,32 @@ export function useAgentRunController({
     setChatInput,
   ])
 
-  useEffect(() => {
-    if (busyTask || queuedChatMessages.length === 0 || flushingQueuedMessageRef.current) {
-      return
-    }
-
-    const [message] = queuedChatMessages
-    if (!message) {
+  const flushNextQueuedMessage = useCallback(async () => {
+    if (flushingQueuedMessageRef.current || queuedMessagesRef.current.length === 0) {
       return
     }
 
     flushingQueuedMessageRef.current = true
-    let cancelled = false
-    queueMicrotask(() => {
-      if (cancelled) {
-        flushingQueuedMessageRef.current = false
-        return
-      }
-      setQueuedChatMessages((current) => current.slice(1))
-      void sendChatMessage(message).finally(() => {
-        flushingQueuedMessageRef.current = false
-        setQueuedChatMessages((current) => (current.length > 0 ? [...current] : current))
-      })
-    })
+    const message = queuedMessagesRef.current[0]
+    queuedMessagesRef.current = queuedMessagesRef.current.slice(1)
+    setQueuedChatMessages([...queuedMessagesRef.current])
 
-    return () => {
-      cancelled = true
+    try {
+      await sendChatMessage(message)
+    } finally {
+      flushingQueuedMessageRef.current = false
     }
-  }, [busyTask, queuedChatMessages, sendChatMessage])
+  }, [sendChatMessage])
+
+  useEffect(() => {
+    if (!busyTask && queuedMessagesRef.current.length > 0) {
+      flushNextQueuedMessage()
+    }
+  }, [busyTask, flushNextQueuedMessage])
 
   const stopCurrentRun = useCallback(() => {
     abortRef.current?.abort()
+    pendingAbortRef.current?.abort()
   }, [])
 
   return {

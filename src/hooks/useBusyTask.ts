@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { BusyTask, BusyTaskId } from '../lib/busyTask'
 
 export type BusyTaskError = {
@@ -9,9 +9,15 @@ export type BusyTaskError = {
 export function useBusyTask(onError?: (error: BusyTaskError) => void) {
   const [busyTask, setBusyTask] = useState<BusyTask | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const inFlightRef = useRef(false)
 
   const runTask = useCallback(
     async (id: BusyTaskId, label: string, action: () => Promise<void>) => {
+      if (inFlightRef.current) {
+        return
+      }
+
+      inFlightRef.current = true
       setBusyTask({ id, label, startedAt: Date.now() })
       setError(null)
       try {
@@ -21,6 +27,7 @@ export function useBusyTask(onError?: (error: BusyTaskError) => void) {
         setError(message)
         onError?.({ label, message })
       } finally {
+        inFlightRef.current = false
         setBusyTask(null)
       }
     },
