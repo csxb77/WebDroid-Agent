@@ -1,5 +1,5 @@
 import { AlertTriangle, Check, X } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { AgentAction } from '../lib/actionTypes'
 import { buildActionPreview } from '../lib/actionPreview'
 import type { AppCopy } from '../lib/appCopy'
@@ -22,6 +22,8 @@ export function SensitiveActionDialog({
   onConfirm,
   request,
 }: SensitiveActionDialogProps) {
+  const confirmButtonRef = useRef<HTMLButtonElement>(null)
+
   useEffect(() => {
     if (!request) {
       return
@@ -34,6 +36,8 @@ export function SensitiveActionDialog({
     }
 
     window.addEventListener('keydown', handleKeyDown)
+    confirmButtonRef.current?.focus()
+
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [onCancel, request])
 
@@ -79,7 +83,7 @@ export function SensitiveActionDialog({
             <X size={16} />
             {copy.cancel}
           </button>
-          <button type="button" className="primary" onClick={onConfirm}>
+          <button type="button" className="primary" onClick={onConfirm} ref={confirmButtonRef}>
             <Check size={16} />
             {copy.execute}
           </button>

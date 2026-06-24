@@ -18,6 +18,7 @@ import { AgentCursor } from './AgentCursor'
 import { ScreenshotLightbox, type ScreenshotSource } from './ScreenshotLightbox'
 import type { BusyTask } from '../lib/busyTask'
 import type { CursorPoint } from '../lib/cursorMotion'
+import { useBodyOverflow } from '../hooks/useBodyOverflow'
 
 export type PhoneStageProps = {
   copy: AppCopy
@@ -48,6 +49,8 @@ export function PhoneStage({
   const hasScreenshot = displayedScreenshot !== null
   const isFullscreenPreview = hasScreenshot && fullscreen
   const isAgentRunning = busyTask?.id === 'run-agent' || runningAgent
+
+  useBodyOverflow(isFullscreenPreview)
 
   const cursor: CursorPoint | null = (() => {
     if (!displayedScreenshot || !isAgentRunning) return null
@@ -91,9 +94,6 @@ export function PhoneStage({
       return
     }
 
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         setFullscreen(false)
@@ -102,7 +102,6 @@ export function PhoneStage({
 
     window.addEventListener('keydown', onKeyDown)
     return () => {
-      document.body.style.overflow = previousOverflow
       window.removeEventListener('keydown', onKeyDown)
     }
   }, [isFullscreenPreview])

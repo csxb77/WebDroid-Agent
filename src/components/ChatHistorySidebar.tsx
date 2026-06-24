@@ -1,5 +1,5 @@
 import { PanelLeftClose, Search, SquarePen, Trash2, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import type { AppCopy } from '../lib/appCopy'
 import type { BusyTask } from '../lib/busyTask'
 import type { AgentThreadSummary } from '../lib/threadStore'
@@ -29,15 +29,22 @@ export function ChatHistorySidebar({
   onSelectThread,
   threadSummaries,
 }: ChatHistorySidebarProps) {
-  const [query, setQuery] = useState('')
+  const [queryInput, setQueryInput] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(queryInput), 300)
+    return () => clearTimeout(timer)
+  }, [queryInput])
+
   const isBusy = Boolean(busyTask)
   const shouldRenderHistoryContent = isOpen
-  const trimmedQuery = query.trim()
+  const trimmedQuery = debouncedQuery.trim()
   const filteredSummaries = useMemo(() => {
     if (!shouldRenderHistoryContent) {
       return []
     }
-    const normalizedQuery = query.trim().toLocaleLowerCase()
+    const normalizedQuery = debouncedQuery.trim().toLocaleLowerCase()
     if (!normalizedQuery) {
       return threadSummaries.slice(0, MAX_RENDERED_HISTORY_ITEMS)
     }
@@ -48,7 +55,7 @@ export function ChatHistorySidebar({
           .some((value) => value.toLocaleLowerCase().includes(normalizedQuery))
       })
       .slice(0, MAX_RENDERED_HISTORY_ITEMS)
-  }, [query, shouldRenderHistoryContent, threadSummaries])
+  }, [debouncedQuery, shouldRenderHistoryContent, threadSummaries])
   const emptyLabel =
     threadSummaries.length === 0
       ? copy.historyEmpty
@@ -97,16 +104,16 @@ export function ChatHistorySidebar({
               <span className="visually-hidden">{copy.historySearchAria}</span>
               <input
                 aria-label={copy.historySearchAria}
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                value={queryInput}
+                onChange={(event) => setQueryInput(event.target.value)}
                 placeholder={copy.historySearchPlaceholder}
               />
-              {query ? (
+              {queryInput ? (
                 <button
                   type="button"
                   aria-label={copy.historySearchClear}
                   title={copy.historySearchClear}
-                  onClick={() => setQuery('')}
+                  onClick={() => setQueryInput('')}
                 >
                   <X size={14} />
                 </button>
@@ -123,7 +130,7 @@ export function ChatHistorySidebar({
                   <button
                     type="button"
                     className="chat-history-empty-action"
-                    onClick={() => setQuery('')}
+                    onClick={() => setQueryInput('')}
                   >
                     {copy.historySearchClear}
                   </button>
@@ -170,7 +177,11 @@ export function ChatHistorySidebar({
                               ? copy.waitForCurrentRun
                               : copy.deleteHistoryThread(summary.title)
                           }
-                          onClick={() => onDeleteThread(summary.id)}
+                          onClick={() => {
+                            if (window.confirm(copy.deleteThreadConfirm(summary.title))) {
+                              onDeleteThread(summary.id)
+                            }
+                          }}
                         >
                           <Trash2 size={15} />
                         </button>

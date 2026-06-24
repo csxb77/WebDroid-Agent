@@ -1,5 +1,6 @@
 import { Maximize2, Minus, Plus, RotateCcw, X } from 'lucide-react'
 import { useEffect, useState, type ReactNode, type WheelEvent } from 'react'
+import { useBodyOverflow } from '../hooks/useBodyOverflow'
 
 export type ScreenshotSource = {
   dataUrl: string
@@ -53,6 +54,8 @@ export function ScreenshotLightbox({
   const [open, setOpen] = useState(false)
   const [zoom, setZoom] = useState(1)
   const zoomPercent = Math.round(zoom * 100)
+
+  useBodyOverflow(open)
 
   useEffect(() => {
     if (!open) {
