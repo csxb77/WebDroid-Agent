@@ -95,15 +95,15 @@ function validateActionAtDepth(
       if (url.length > 2048) {
         throw new ActionValidationError('open_url is limited to 2048 characters.')
       }
-      if (!hasUriScheme(url)) {
-        throw new ActionValidationError('open_url must include a URI scheme such as https://.')
+      if (!hasAllowedUriScheme(url)) {
+        throw new ActionValidationError('open_url scheme must be one of: http, https, mailto, tel, market.')
       }
       return withReason({ action, url }, candidate)
     }
     case 'set_clipboard': {
       const text = readFirstString(candidate, ['text'])
-      if (hasNullCharacter(text)) {
-        throw new ActionValidationError('set_clipboard cannot contain null characters.')
+      if (hasControlCharacters(text)) {
+        throw new ActionValidationError('set_clipboard cannot contain control characters.')
       }
       if (text.length > 4000) {
         throw new ActionValidationError('set_clipboard is limited to 4000 characters.')
@@ -529,6 +529,17 @@ function hasNullCharacter(value: string) {
 
 function hasUriScheme(value: string) {
   return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)
+}
+
+const ALLOWED_URI_SCHEMES = ['http', 'https', 'mailto', 'tel', 'market'] as const
+
+function hasAllowedUriScheme(value: string): boolean {
+  const match = value.match(/^([A-Za-z][A-Za-z0-9+.-]*):/)
+  if (!match) {
+    return false
+  }
+  const scheme = match[1].toLowerCase()
+  return ALLOWED_URI_SCHEMES.includes(scheme as any)
 }
 
 function clamp(value: number, min: number, max: number) {
