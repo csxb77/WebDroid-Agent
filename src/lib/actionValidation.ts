@@ -52,7 +52,11 @@ function validateActionAtDepth(
   switch (action) {
     case 'launch': {
       const app = readFirstString(candidate, ['app'])
-      const packageName = optionalString(candidate, 'packageName') ?? optionalPackageNameFromApp(app)
+      const explicitPackageName = optionalString(candidate, 'packageName')
+      if (explicitPackageName && !isValidPackageName(explicitPackageName)) {
+        throw new ActionValidationError('packageName must be a valid Android package name.')
+      }
+      const packageName = explicitPackageName ?? optionalPackageNameFromApp(app)
       return withReason(packageName ? { action, app, packageName } : { action, app }, candidate)
     }
     case 'tap': {
@@ -91,15 +95,15 @@ function validateActionAtDepth(
       if (url.length > 2048) {
         throw new ActionValidationError('open_url is limited to 2048 characters.')
       }
-      if (!hasUriScheme(url)) {
-        throw new ActionValidationError('open_url must include a URI scheme such as https://.')
+      if (!hasAllowedUriScheme(url)) {
+        throw new ActionValidationError('open_url scheme must be one of: http, https, mailto, tel, market.')
       }
       return withReason({ action, url }, candidate)
     }
     case 'set_clipboard': {
       const text = readFirstString(candidate, ['text'])
-      if (hasNullCharacter(text)) {
-        throw new ActionValidationError('set_clipboard cannot contain null characters.')
+      if (hasControlCharacters(text)) {
+        throw new ActionValidationError('set_clipboard cannot contain control characters.')
       }
       if (text.length > 4000) {
         throw new ActionValidationError('set_clipboard is limited to 4000 characters.')
@@ -502,7 +506,14 @@ function readCustomToolInput(record: Record<string, unknown>) {
 }
 
 function optionalPackageNameFromApp(app: string): string | undefined {
-  return app.includes('.') ? app : undefined
+  if (!app.includes('.')) {
+    return undefined
+  }
+  return isValidPackageName(app) ? app : undefined
+}
+
+function isValidPackageName(value: string): boolean {
+  return /^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/.test(value)
 }
 
 function hasControlCharacters(value: string) {
@@ -518,6 +529,17 @@ function hasNullCharacter(value: string) {
 
 function hasUriScheme(value: string) {
   return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)
+}
+
+const ALLOWED_URI_SCHEMES = ['http', 'https', 'mailto', 'tel', 'market'] as const
+
+function hasAllowedUriScheme(value: string): boolean {
+  const match = value.match(/^([A-Za-z][A-Za-z0-9+.-]*):/)
+  if (!match) {
+    return false
+  }
+  const scheme = match[1].toLowerCase()
+  return ALLOWED_URI_SCHEMES.includes(scheme as any)
 }
 
 function clamp(value: number, min: number, max: number) {

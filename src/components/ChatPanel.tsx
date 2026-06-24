@@ -102,7 +102,7 @@ export function ChatPanel({
     visibleQueuedMessageCount > 0 ||
     Boolean(sessionSummary && shouldShowSessionSummary(sessionSummary))
   const submitChatIfNotEmpty = () => {
-    if (!chatIsEmpty) {
+    if (!chatIsEmpty && !isBusy) {
       onSubmitChatMessage()
     }
   }
@@ -112,7 +112,9 @@ export function ChatPanel({
     }
 
     event.preventDefault()
-    submitChatIfNotEmpty()
+    if (!isBusy) {
+      submitChatIfNotEmpty()
+    }
   }
   const handleChatInputChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     onChatInputChange(event.target.value)

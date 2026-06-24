@@ -707,6 +707,7 @@ export function createAgentRunner({
       const session = input.session ?? createAgentSession(input.task)
       const startIndex = nextAgentStepIndex(session)
       let recoverableExecutionFailures = 0
+      let consecutiveModelErrors = 0
 
       for (let offset = 0; offset < input.maxSteps; offset += 1) {
         const index = startIndex + offset
@@ -753,8 +754,8 @@ export function createAgentRunner({
               onMemoryItem: input.onMemoryItem,
             })
             steps.push(retainStepForRunResult(step))
-            recoverableExecutionFailures += 1
-            if (recoverableExecutionFailures > MAX_AUTO_RECOVERABLE_EXECUTION_FAILURES) {
+            consecutiveModelErrors += 1
+            if (consecutiveModelErrors > MAX_AUTO_RECOVERABLE_EXECUTION_FAILURES) {
               return { status: 'awaiting_review', steps, reason: caught.message }
             }
             continue
@@ -882,6 +883,7 @@ export function createAgentRunner({
           continue
         }
         recoverableExecutionFailures = 0
+        consecutiveModelErrors = 0
       }
 
       return { status: 'max_steps', steps }

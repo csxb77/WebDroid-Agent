@@ -302,6 +302,7 @@ export const EN_US_COPY = {
   historySearchClear: 'Clear history search',
   openHistoryThread: (title: string) => `Open chat ${title}`,
   deleteHistoryThread: (title: string) => `Delete chat ${title}`,
+  deleteThreadConfirm: (title: string) => `Delete chat "${title}"? This cannot be undone.`,
   conversation: 'Conversation',
   sessionState: 'Session state',
   sessionStatusIdle: 'Idle',

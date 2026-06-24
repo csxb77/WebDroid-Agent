@@ -189,23 +189,22 @@ describe('validateAction', () => {
       action: 'open_url',
       url: 'https://example.com/search?q=webdroid',
     })
-    expect(parseModelAction('{"action":"open_url","url":"myapp://detail/123"}')).toEqual({
-      action: 'open_url',
-      url: 'myapp://detail/123',
-    })
-    expect(validateAction({ action: 'set_clipboard', text: '测试\nhello' })).toEqual({
+    expect(validateAction({ action: 'set_clipboard', text: '测试 hello' })).toEqual({
       action: 'set_clipboard',
-      text: '测试\nhello',
+      text: '测试 hello',
     })
     expect(validateAction({ action: 'paste' })).toEqual({ action: 'paste' })
   })
 
   it('rejects unsafe URL and clipboard actions', () => {
     expect(() => validateAction({ action: 'open_url', url: 'example.com' }, screen)).toThrow(
-      'URI scheme',
+      'scheme must be one of',
+    )
+    expect(() => validateAction({ action: 'open_url', url: 'myapp://detail/123' }, screen)).toThrow(
+      'scheme must be one of',
     )
     expect(() => validateAction({ action: 'set_clipboard', text: 'bad\0text' }, screen)).toThrow(
-      'null characters',
+      'control characters',
     )
   })
 

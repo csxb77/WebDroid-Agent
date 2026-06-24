@@ -1,6 +1,7 @@
 import type { AgentAction, KeyAction } from '../lib/actionTypes'
 import { resolveAppPackage } from './appPackages'
 import { escapeInputText } from './adbKeyboard'
+import { escapeShellArg } from './shellEscape'
 import { DEFAULT_DEVICE_TIMING } from './deviceTiming'
 import {
   DeviceBackendError,
@@ -59,7 +60,7 @@ export function buildInputCommandSequence(
       return sequence
     }
     case 'open_url':
-      return [['am', 'start', '-a', 'android.intent.action.VIEW', '-d', action.url]]
+      return [['am', 'start', '-a', 'android.intent.action.VIEW', '-d', escapeShellArg(action.url)]]
     case 'set_clipboard':
       return []
     case 'paste':

@@ -298,6 +298,7 @@ export const ZH_CN_COPY = {
   historySearchClear: '清除历史搜索',
   openHistoryThread: (title: string) => `打开聊天：${title}`,
   deleteHistoryThread: (title: string) => `删除聊天：${title}`,
+  deleteThreadConfirm: (title: string) => `删除聊天"${title}"？此操作无法撤销。`,
   conversation: '对话',
   sessionState: '会话状态',
   sessionStatusIdle: '空闲',

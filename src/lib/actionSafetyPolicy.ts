@@ -1,6 +1,10 @@
 import type { DeviceState } from '../adapters/deviceTypes'
 import type { AgentAction } from './actionTypes'
 
+function normalizeNFKC(value: string): string {
+  return value.normalize('NFKC')
+}
+
 export type ActionSafetyDecision = 'allow' | 'confirm' | 'block' | 'take_over'
 
 export type ActionSafetyPolicyResult = {
@@ -58,6 +62,7 @@ const MUTATING_ACTIONS = new Set<AgentAction['action']>([
   'long_press',
   'double_tap',
   'input_text',
+  'type_secret',
   'open_url',
   'paste',
   'set_clipboard',
@@ -133,20 +138,24 @@ function collectPolicyEvidence(action: AgentAction, context: ActionSafetyContext
     'reason' in action ? action.reason : undefined,
     action.action === 'tap' ? action.message : undefined,
     action.action === 'input_text' ? action.text : undefined,
+    action.action === 'type_secret' ? action.secretId : undefined,
     action.action === 'set_clipboard' ? action.text : undefined,
     action.action === 'open_url' ? action.url : undefined,
     action.action === 'launch' ? action.app : undefined,
     action.action === 'key' ? action.key : undefined,
-  ]
+  ].map((field) => (field ? normalizeNFKC(field) : field))
+
   const deviceFields = [
     context.currentApp,
     context.deviceState?.app,
     context.deviceState?.packageName,
     context.deviceState?.activity,
-  ]
+  ].map((field) => (field ? normalizeNFKC(field) : field))
 
   return {
-    all: [...actionFields, ...deviceFields, context.task, context.modelOutput].join('\n'),
+    all: [...actionFields, ...deviceFields, context.task, context.modelOutput]
+      .map((field) => (field ? normalizeNFKC(field) : field))
+      .join('\n'),
     device: deviceFields.join('\n'),
   }
 }
