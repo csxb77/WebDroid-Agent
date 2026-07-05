@@ -28,6 +28,7 @@ docs/
 # Test output
 coverage
 .vitest
+test-results
 
 # Tool caches
 .vite
@@ -48,3 +49,6 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Superpowers brainstorming mockups (local only)
+.superpowers/

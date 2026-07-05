@@ -151,6 +151,8 @@ export const ZH_CN_COPY = {
   providerCustom: 'OpenAI 兼容',
   providerQwen: 'Qwen',
   providerGemini: 'Gemini',
+  geminiNativeModeNotice:
+    '使用 Gemini 原生 generateContent 接口(API Key 通过查询参数传递)。思考深度映射到 Gemini 的 thinkingLevel。',
   baseUrl: 'Base URL',
   apiKey: 'API Key',
   showApiKey: '显示 API Key',

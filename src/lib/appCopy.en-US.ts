@@ -154,6 +154,8 @@ export const EN_US_COPY = {
   providerCustom: 'OpenAI Compatible',
   providerQwen: 'Qwen',
   providerGemini: 'Gemini',
+  geminiNativeModeNotice:
+    'Uses the native Gemini generateContent API (key in the query string). Thinking depth follows the Gemini thinkingLevel mapping.',
   baseUrl: 'Base URL',
   apiKey: 'API Key',
   showApiKey: 'Show API key',

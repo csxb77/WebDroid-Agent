@@ -12,10 +12,20 @@ import {
 import { LazyWebAdbDeviceBackend } from './adapters/lazyWebAdbBackend'
 import type { AgentStep } from './lib/agent'
 import type { AgentAction } from './lib/actionTypes'
-import { createOpenAiClient } from './lib/openAiClient'
-import type { ModelConfig } from './lib/openAiTypes'
-import { APP_COPY, resolveLocale } from './lib/appCopy'
 import type { ActionProtocol } from './lib/actionProtocol'
+import { createOpenAiClient } from './lib/openAiClient'
+import { createGeminiClient } from './lib/geminiClient'
+import { isGeminiProvider } from './lib/geminiTypes'
+import type { ModelConfig } from './lib/openAiTypes'
+import { OPENAI_PROXY_URL } from './lib/openAiRuntimeConfig'
+import { APP_COPY, resolveLocale } from './lib/appCopy'
+import { loadSettings, normalizeMaxSteps, type AppSettings } from './lib/settings'
+import { createDefaultActionToolRegistry, type ActionToolName } from './lib/toolRegistry'
+import { loadMemoryItems, rememberMemoryItem, saveMemoryItems } from './lib/memory'
+import {
+  requestTaskNotificationPermission,
+  showTaskNotification,
+} from './lib/taskNotifications'
 import { useAgentRunController } from './hooks/useAgentRunController'
 import { useConfigTargetScroll } from './hooks/useConfigTargetScroll'
 import { useDeviceController } from './hooks/useDeviceController'
@@ -28,14 +38,6 @@ import { usePersistedSettings } from './hooks/usePersistedSettings'
 import { useRepositoryStats } from './hooks/useRepositoryStats'
 import { useRunLog } from './hooks/useRunLog'
 import { useStorageEstimate } from './hooks/useStorageEstimate'
-import { OPENAI_PROXY_URL } from './lib/openAiRuntimeConfig'
-import { loadSettings, normalizeMaxSteps, type AppSettings } from './lib/settings'
-import { createDefaultActionToolRegistry, type ActionToolName } from './lib/toolRegistry'
-import { loadMemoryItems, rememberMemoryItem, saveMemoryItems } from './lib/memory'
-import {
-  requestTaskNotificationPermission,
-  showTaskNotification,
-} from './lib/taskNotifications'
 import { AppProvider } from './components/AppContext'
 import { AppTopbar } from './components/AppTopbar'
 import { ConfigSidebar } from './components/ConfigSidebar'
@@ -48,6 +50,13 @@ import {
   type SensitiveActionDialogRequest,
 } from './components/SensitiveActionDialog'
 
+function createModelClient(modelConfig: ModelConfig) {
+  if (isGeminiProvider(modelConfig.provider)) {
+    return createGeminiClient(globalThis.fetch)
+  }
+  return createOpenAiClient(globalThis.fetch, { proxyUrl: OPENAI_PROXY_URL })
+}
+
 const SettingsDialog = lazy(() =>
   import('./components/SettingsDialog').then((module) => ({ default: module.SettingsDialog })),
 )
@@ -58,9 +67,12 @@ const TutorialPanel = lazy(() =>
 function App() {
   const settings = useMemo(() => loadSettings(), [])
   const [backend] = useState(() => new LazyWebAdbDeviceBackend())
+  const [modelConfig, setModelConfig] = useState<ModelConfig>(settings.modelConfig)
   const client = useMemo(
-    () => createOpenAiClient(globalThis.fetch, { proxyUrl: OPENAI_PROXY_URL }),
-    [],
+    () => createModelClient(modelConfig),
+    // Client type only depends on the provider; baseUrl/apiKey/model are read per-request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [modelConfig.provider],
   )
   const [actionProtocol, setActionProtocol] = useState<ActionProtocol>(settings.actionProtocol)
   const [disabledActionTools, setDisabledActionTools] = useState<ActionToolName[]>(
@@ -86,7 +98,6 @@ function App() {
     updateSecretRecordsJson,
   } = useLocalResourcesState()
   const [historySidebarOpen, setHistorySidebarOpen] = useState(false)
-  const [modelConfig, setModelConfig] = useState<ModelConfig>(settings.modelConfig)
   const [chatInput, setChatInput] = useState('')
   const [maxSteps, setMaxSteps] = useState(settings.maxSteps)
   const [memoryEnabled, setMemoryEnabled] = useState(settings.memoryEnabled)
@@ -398,165 +409,164 @@ function App() {
           onToggleTutorial={toggleTutorial}
         />
 
-      <Suspense fallback={null}>
-        {settingsOpen ? (
-          <SettingsDialog
-            copy={copy}
-            appCardsJson={appCardsJson}
-            appCardsJsonError={appCardsJsonError}
-            customToolsJson={customToolsJson}
-            customToolsJsonError={customToolsJsonError}
-            languageMode={languageMode}
-            maxSteps={maxSteps}
-            taskNotificationsEnabled={taskNotificationsEnabled}
-            disabledActionTools={disabledActionTools}
-            onAppCardsJsonChange={updateAppCardsJson}
-            onCustomToolsJsonChange={updateCustomToolsJson}
-            onDisabledActionToolsChange={setDisabledActionTools}
-            onClearChatHistory={() => {
-              void clearChatHistoryFromSettings()
-            }}
-            onClearRunLog={clearLogs}
-            onClose={() => setSettingsOpen(false)}
-            onLanguageModeChange={setLanguageMode}
-            onMaxStepsChange={updateMaxSteps}
-            onResetAppCards={resetAppCards}
-            onSecretRecordsJsonChange={updateSecretRecordsJson}
-            onTaskNotificationsEnabledChange={(value) => {
-              void handleTaskNotificationsEnabledChange(value)
-            }}
-            onThemeModeChange={setThemeMode}
-            repositoryStats={repositoryStats}
-            repositoryStatsStatus={repositoryStatsStatus}
-            storageEstimate={storageEstimate}
-            storageEstimateStatus={storageEstimateStatus}
-            secretRecordsJson={secretRecordsJson}
-            secretRecordsJsonError={secretRecordsJsonError}
-            themeMode={themeMode}
-          />
-        ) : null}
+        <Suspense fallback={null}>
+          {settingsOpen ? (
+            <SettingsDialog
+              copy={copy}
+              appCardsJson={appCardsJson}
+              appCardsJsonError={appCardsJsonError}
+              customToolsJson={customToolsJson}
+              customToolsJsonError={customToolsJsonError}
+              languageMode={languageMode}
+              maxSteps={maxSteps}
+              taskNotificationsEnabled={taskNotificationsEnabled}
+              disabledActionTools={disabledActionTools}
+              onAppCardsJsonChange={updateAppCardsJson}
+              onCustomToolsJsonChange={updateCustomToolsJson}
+              onDisabledActionToolsChange={setDisabledActionTools}
+              onClearChatHistory={() => {
+                void clearChatHistoryFromSettings()
+              }}
+              onClearRunLog={clearLogs}
+              onClose={() => setSettingsOpen(false)}
+              onLanguageModeChange={setLanguageMode}
+              onMaxStepsChange={updateMaxSteps}
+              onResetAppCards={resetAppCards}
+              onSecretRecordsJsonChange={updateSecretRecordsJson}
+              onTaskNotificationsEnabledChange={(value) => {
+                void handleTaskNotificationsEnabledChange(value)
+              }}
+              onThemeModeChange={setThemeMode}
+              repositoryStats={repositoryStats}
+              repositoryStatsStatus={repositoryStatsStatus}
+              storageEstimate={storageEstimate}
+              storageEstimateStatus={storageEstimateStatus}
+              secretRecordsJson={secretRecordsJson}
+              secretRecordsJsonError={secretRecordsJsonError}
+              themeMode={themeMode}
+            />
+          ) : null}
 
-        {tutorialOpen ? (
-          <TutorialPanel copy={copy} onClose={() => setTutorialOpen(false)} />
-        ) : null}
+          {tutorialOpen ? (
+            <TutorialPanel copy={copy} onClose={() => setTutorialOpen(false)} />
+          ) : null}
+        </Suspense>
 
-      </Suspense>
-
-      <SensitiveActionDialog
-        copy={copy}
-        request={sensitiveActionRequest}
-        onCancel={() => settleSensitiveActionRequest(false)}
-        onConfirm={() => settleSensitiveActionRequest(true)}
-      />
-
-      {error ? (
-        <div className="alert">
-          <AlertTriangle size={18} />
-          <span>{error}</span>
-        </div>
-      ) : null}
-
-      <section
-        className={
-          configSidebarOpen ? 'workspace' : 'workspace workspace-config-collapsed'
-        }
-      >
-        <ConfigSidebar
-          deviceActions={device.actions}
-          deviceOptions={device.options}
-          deviceState={device.state}
-          isOpen={configSidebarOpen}
-          memoryEnabled={memoryEnabled}
-          modelConfig={modelConfig}
-          actionProtocol={actionProtocol}
-          onModelConfigChange={updateConfig}
-          onActionProtocolChange={setActionProtocol}
-          onMemoryEnabledChange={setMemoryEnabled}
-          onScreenBlackoutDuringAutoControlChange={setScreenBlackoutDuringAutoControl}
-          onSelectTarget={openConfigTarget}
-          onStreamResponsesChange={setStreamResponses}
-          onToggleOpen={() => setConfigSidebarOpen((current) => !current)}
-          screenBlackoutDuringAutoControl={screenBlackoutDuringAutoControl}
-          streamResponses={streamResponses}
+        <SensitiveActionDialog
+          copy={copy}
+          request={sensitiveActionRequest}
+          onCancel={() => settleSensitiveActionRequest(false)}
+          onConfirm={() => settleSensitiveActionRequest(true)}
         />
 
-        <div className="phone-column">
-          <PhoneStage
+        {error ? (
+          <div className="alert">
+            <AlertTriangle size={18} />
+            <span>{error}</span>
+          </div>
+        ) : null}
+
+        <section
+          className={
+            configSidebarOpen ? 'workspace' : 'workspace workspace-config-collapsed'
+          }
+        >
+          <ConfigSidebar
+            deviceActions={device.actions}
+            deviceOptions={device.options}
+            deviceState={device.state}
+            isOpen={configSidebarOpen}
+            memoryEnabled={memoryEnabled}
+            modelConfig={modelConfig}
+            actionProtocol={actionProtocol}
+            onModelConfigChange={updateConfig}
+            onActionProtocolChange={setActionProtocol}
+            onMemoryEnabledChange={setMemoryEnabled}
+            onScreenBlackoutDuringAutoControlChange={setScreenBlackoutDuringAutoControl}
+            onSelectTarget={openConfigTarget}
+            onStreamResponsesChange={setStreamResponses}
+            onToggleOpen={() => setConfigSidebarOpen((current) => !current)}
+            screenBlackoutDuringAutoControl={screenBlackoutDuringAutoControl}
+            streamResponses={streamResponses}
+          />
+
+          <div className="phone-column">
+            <PhoneStage
+              busyTask={busyTask}
+              copy={copy}
+              displayedScreenshot={device.displayedScreenshot}
+              onRunInteractiveAction={device.runScreenshotAction}
+              pendingStep={pendingStep}
+              runningAgent={Boolean(
+                busyTask?.id === 'run-agent' || (device.state?.currentApp != null && pendingStep != null),
+              )}
+            />
+            <DeviceQuickControls
+              busyTask={busyTask}
+              connected={device.connected}
+              copy={copy}
+              onRunDirectAction={device.actions.onRunDirectAction}
+            />
+          </div>
+
+          <ConversationPanel
+            activeThreadId={activeThreadId}
             busyTask={busyTask}
-            copy={copy}
-            displayedScreenshot={device.displayedScreenshot}
-            onRunInteractiveAction={device.runScreenshotAction}
+            chatInput={chatInput}
+            conversation={conversation}
+            interactionItems={interactionItems}
+            historySidebarOpen={historySidebarOpen}
+            sessionSummary={sessionSummary}
+            onChatInputChange={setChatInput}
+            onCloseHistorySidebar={() => setHistorySidebarOpen(false)}
+            onDeleteThread={(threadId) => {
+              void deleteHistoryThread(threadId)
+            }}
+            onExecutePendingStep={executePendingStep}
+            onSelectThread={(threadId) => {
+              void selectHistoryThread(threadId)
+            }}
+            onStartNewChat={startNewChat}
+            onStopRun={handleStopRun}
+            onSubmitChatMessage={submitChatMessage}
+            onToggleHistorySidebar={() => setHistorySidebarOpen((current) => !current)}
             pendingStep={pendingStep}
-            runningAgent={Boolean(
-              busyTask?.id === 'run-agent' || (device.state?.currentApp != null && pendingStep != null),
-            )}
+            queuedChatMessageCount={queuedChatMessageCount}
+            threadSummaries={threadSummaries}
           />
-          <DeviceQuickControls
-            busyTask={busyTask}
-            connected={device.connected}
-            copy={copy}
-            onRunDirectAction={device.actions.onRunDirectAction}
-          />
-        </div>
+        </section>
 
-        <ConversationPanel
-          activeThreadId={activeThreadId}
-          busyTask={busyTask}
-          chatInput={chatInput}
-          conversation={conversation}
-          interactionItems={interactionItems}
-          historySidebarOpen={historySidebarOpen}
-          sessionSummary={sessionSummary}
-          onChatInputChange={setChatInput}
-          onCloseHistorySidebar={() => setHistorySidebarOpen(false)}
-          onDeleteThread={(threadId) => {
-            void deleteHistoryThread(threadId)
-          }}
-          onExecutePendingStep={executePendingStep}
-          onSelectThread={(threadId) => {
-            void selectHistoryThread(threadId)
-          }}
-          onStartNewChat={startNewChat}
-          onStopRun={handleStopRun}
-          onSubmitChatMessage={submitChatMessage}
-          onToggleHistorySidebar={() => setHistorySidebarOpen((current) => !current)}
-          pendingStep={pendingStep}
-          queuedChatMessageCount={queuedChatMessageCount}
-          threadSummaries={threadSummaries}
-        />
-      </section>
-
-      <details className="log-drawer compact-section" open={runLogOpen} ref={runLogDrawerRef}>
-        <summary onClick={toggleRunLog}>
-          <span>{copy.runLog}</span>
-          <small>{logs[0]?.title ?? copy.noEvents}</small>
-        </summary>
-        {runLogOpen ? (
-          <RunLog
-            logs={logs}
-            onClear={clearLogs}
-            labels={{
-              clear: copy.clear,
-              closeScreenshotPreview: copy.closeScreenshotPreview,
-              empty: copy.noEvents,
-              executionResult: copy.stepExecutionResult,
-              expandedScreenshotFor: (title) => `${copy.expandedAndroidScreenshot}: ${title}`,
-              modelOutput: copy.stepModelOutput,
-              openScreenshotFor: copy.openScreenshotFor,
-              parsedAction: copy.stepParsedAction,
-              resetScreenshotZoom: copy.resetScreenshotZoom,
-              screenshotDialogFor: copy.screenshotDialogFor,
-              screenshotFor: (title) => `${copy.androidScreenshot}: ${title}`,
-              screenshotZoomControls: copy.screenshotZoomControls,
-              step: (step) => `${copy.step} ${step}`,
-              title: copy.runLog,
-              zoomInScreenshot: copy.zoomInScreenshot,
-              zoomOutScreenshot: copy.zoomOutScreenshot,
-            }}
-          />
-        ) : null}
-      </details>
-    </main>
+        <details className="log-drawer compact-section" open={runLogOpen} ref={runLogDrawerRef}>
+          <summary onClick={toggleRunLog}>
+            <span>{copy.runLog}</span>
+            <small>{logs[0]?.title ?? copy.noEvents}</small>
+          </summary>
+          {runLogOpen ? (
+            <RunLog
+              logs={logs}
+              onClear={clearLogs}
+              labels={{
+                clear: copy.clear,
+                closeScreenshotPreview: copy.closeScreenshotPreview,
+                empty: copy.noEvents,
+                executionResult: copy.stepExecutionResult,
+                expandedScreenshotFor: (title) => `${copy.expandedAndroidScreenshot}: ${title}`,
+                modelOutput: copy.stepModelOutput,
+                openScreenshotFor: copy.openScreenshotFor,
+                parsedAction: copy.stepParsedAction,
+                resetScreenshotZoom: copy.resetScreenshotZoom,
+                screenshotDialogFor: copy.screenshotDialogFor,
+                screenshotFor: (title) => `${copy.androidScreenshot}: ${title}`,
+                screenshotZoomControls: copy.screenshotZoomControls,
+                step: (step) => `${copy.step} ${step}`,
+                title: copy.runLog,
+                zoomInScreenshot: copy.zoomInScreenshot,
+                zoomOutScreenshot: copy.zoomOutScreenshot,
+              }}
+            />
+          ) : null}
+        </details>
+      </main>
     </AppProvider>
   )
 }

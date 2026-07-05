@@ -46,13 +46,10 @@ export function ModelPanel({
   const [apiKeyVisible, setApiKeyVisible] = useState(false)
   const providerValue = providerValueFor(modelConfig)
   const isQwenPreset = providerValue === 'qwen'
+  const isGeminiPreset = providerValue === 'gemini'
   const qwenThinkingEnabled = modelConfig.qwenThinkingEnabled ?? true
   const qwenThinkingBudget = modelConfig.qwenThinkingBudget ?? DEFAULT_QWEN_THINKING_BUDGET
   const apiKeyVisibilityLabel = apiKeyVisible ? copy.hideApiKey : copy.showApiKey
-  const actionProtocolLabel =
-    actionProtocol === 'webdroid_normalized_json'
-      ? copy.actionProtocolWebDroidNormalizedJson
-      : copy.actionProtocolWebDroidJson
   const requiredModelFields: Array<{
     key: RequiredModelFieldKey
     label: string
@@ -107,48 +104,19 @@ export function ModelPanel({
           <h2>{copy.model}</h2>
         </div>
         <span className={`config-section-badge ${modelHeadingStatusTone}`}>
+          {modelConfig.model.trim() || copy.noModel}
+          <span className="config-section-badge-sep">·</span>
           {modelHeadingStatusLabel}
         </span>
       </div>
       <div className="model-box">
-        <div
-          className={`model-config-status ${
-            modelConfigurationReady ? 'ready' : 'needs-config'
-          }`}
-          role="status"
-          aria-label={copy.modelConfigurationStatus}
-        >
-          <div className="model-config-status-header">
-            <span className="model-config-status-kicker">
-              {modelConfigurationReady
-                ? copy.modelConfigurationReady
-                : copy.modelConfigurationRequiredNext}
-            </span>
-          </div>
-          <div className="model-config-status-main">
-            <strong>{modelConfig.model.trim() || copy.noModel}</strong>
-            {modelConfigurationReady ? (
-              <div className="model-config-chip-row">
-                <span className="model-config-chip">{actionProtocolLabel}</span>
-              </div>
-            ) : (
-              <>
-                <div className="model-config-chip-row">
-                  {missingModelFields.map((field) => (
-                    <span className="model-config-chip" key={field.key}>
-                      {copy.modelConfigurationNeedsField(field.label)}
-                    </span>
-                  ))}
-                </div>
-                {missingModelFields.map((field) => (
-                  <p className="model-config-status-help" key={field.key}>
-                    {copy.modelConfigurationFieldRequired(field.label)}
-                  </p>
-                ))}
-              </>
-            )}
-          </div>
-        </div>
+        {modelConfigurationReady ? null : (
+          <p className="model-config-status-help">
+            {missingModelFields
+              .map((field) => copy.modelConfigurationFieldRequired(field.label))
+              .join(' ')}
+          </p>
+        )}
         <details className="model-details">
           <summary>{copy.modelSettings}</summary>
           <form className="model-settings-form" onSubmit={(event) => event.preventDefault()}>
@@ -253,6 +221,10 @@ export function ModelPanel({
                   </label>
                 ) : null}
               </>
+            ) : isGeminiPreset ? (
+              <p className="model-config-status-help">
+                {copy.geminiNativeModeNotice}
+              </p>
             ) : (
               <label htmlFor={reasoningEffortInputId}>
                 {copy.reasoningEffort}

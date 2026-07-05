@@ -84,41 +84,57 @@
 
 .config-panel-content {
   display: grid;
-  gap: var(--space-6);
-  margin-top: var(--space-6);
+  gap: 0;
+  margin-top: var(--space-5);
   min-width: 0;
   order: 2;
 }
 
 .config-panel-group {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-3);
   min-width: 0;
+  padding: var(--space-5) 0;
 }
 
 .config-panel-content > .config-panel-group + .config-panel-group {
-  border-top: 1px solid var(--border);
-  padding-top: var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+  border-top-style: solid;
+  padding-top: var(--space-5);
+}
+
+.config-panel-group:last-child {
+  padding-bottom: 0;
 }
 
 .config-panel-group {
   scroll-margin: var(--space-5);
 }
 
+/* C-style section heading: flat row, icon + title left, meta + action right */
 .config-section-heading {
   align-items: center;
-  display: grid;
+  display: flex;
   gap: var(--space-3);
-  grid-template-columns: minmax(0, 1fr) minmax(0, min(46%, 116px));
   min-width: 0;
 }
 
 .config-section-heading .panel-title {
-  gap: var(--space-3);
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
   min-width: 0;
 }
 
+.config-section-heading .panel-title svg {
+  color: var(--text);
+}
+
 .config-section-heading .panel-title h2 {
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.005em;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -127,12 +143,14 @@
 
 .config-section-heading > span {
   align-items: center;
+  color: var(--text-soft);
   display: inline-flex;
   font-size: var(--text-xs);
-  font-weight: 600;
-  gap: 6px;
+  font-weight: 500;
+  gap: var(--space-2);
   justify-self: end;
   line-height: 1.2;
+  margin-left: auto;
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
@@ -141,53 +159,35 @@
   width: fit-content;
 }
 
+/* C-style: kill the colored dot, use text-only status */
 .config-section-heading > span::before {
+  content: none;
+}
+
+.config-section-heading > span::after {
   border-radius: var(--radius-full);
   content: "";
-  display: inline-block;
-  flex: 0 0 auto;
-  height: 6px;
-  width: 6px;
+  display: none;
 }
 
 .config-section-badge {
-  color: var(--text-muted);
-}
-
-.config-section-badge::before {
-  background: var(--text-soft);
+  color: var(--text-soft);
 }
 
 .config-section-badge.ready {
   color: var(--status-ok-text);
 }
 
-.config-section-badge.ready::before {
-  background: var(--primary);
-}
-
 .config-section-badge.warning {
   color: var(--warn);
 }
 
-.config-section-badge.warning::before {
-  background: var(--warn);
-}
-
 .config-section-badge.neutral {
-  color: var(--text-muted);
-}
-
-.config-section-badge.neutral::before {
-  background: var(--text-soft);
+  color: var(--text-soft);
 }
 
 .config-section-badge.count {
-  color: var(--accent-soft-text);
-}
-
-.config-section-badge.count::before {
-  background: var(--accent);
+  color: var(--text-soft);
 }
 
 .config-panel-collapsed .config-sidebar-header {

@@ -9,7 +9,7 @@ export const MODEL_PROVIDER_PRESETS = {
     model: 'qwen3.7-plus',
   },
   gemini: {
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     model: 'gemini-3.5-flash',
   },
 } as const
