@@ -84,10 +84,16 @@
 
 .config-panel-content {
   display: grid;
-  gap: 0;
+  gap: var(--space-5);
   margin-top: var(--space-5);
   min-width: 0;
   order: 2;
+}
+
+.config-panel-content > .config-panel-group + .config-panel-group {
+  border-top: 1px solid var(--border-subtle);
+  border-top-style: solid;
+  padding-top: var(--space-5);
 }
 
 .config-panel-group {
@@ -95,12 +101,6 @@
   gap: var(--space-3);
   min-width: 0;
   padding: var(--space-5) 0;
-}
-
-.config-panel-content > .config-panel-group + .config-panel-group {
-  border-top: 1px solid var(--border-subtle);
-  border-top-style: solid;
-  padding-top: var(--space-5);
 }
 
 .config-panel-group:last-child {
@@ -114,8 +114,9 @@
 /* C-style section heading: flat row, icon + title left, meta + action right */
 .config-section-heading {
   align-items: center;
-  display: flex;
+  display: grid;
   gap: var(--space-3);
+  grid-template-columns: minmax(0, 1fr) minmax(0, min(46%, 116px));
   min-width: 0;
 }
 
@@ -159,6 +160,16 @@
   width: fit-content;
 }
 
+.config-section-heading > span.config-section-badge {
+  width: 100%;
+}
+
+/* ponytail: revert badge to inline content width so it sits at the column end,
+   not stretched to the full 2nd grid column. */
+.config-section-heading > span.config-section-badge:not(:only-child) {
+  width: fit-content;
+}
+
 /* C-style: kill the colored dot, use text-only status */
 .config-section-heading > span::before {
   content: none;
@@ -171,22 +182,27 @@
 }
 
 .config-section-badge {
+  background: var(--status-bg);
   color: var(--text-soft);
 }
 
 .config-section-badge.ready {
+  background: var(--status-ok-bg);
   color: var(--status-ok-text);
 }
 
 .config-section-badge.warning {
+  background: var(--warn-bg);
   color: var(--warn);
 }
 
 .config-section-badge.neutral {
+  background: var(--status-bg);
   color: var(--text-soft);
 }
 
 .config-section-badge.count {
+  background: var(--accent-soft);
   color: var(--text-soft);
 }
 

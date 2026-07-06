@@ -15,6 +15,9 @@ export function AgentCursor({ cursor, isVisible, viewportSize, onArrived }: Agen
   const motionRef = useRef<CursorMotion | null>(null)
   const animFrameRef = useRef<number | null>(null)
   const turnKeyRef = useRef<string | null>(null)
+  // ponytail: ref breaks the applyFrame→scheduleNextFrame→tick cycle so the
+  // useCallback for applyFrame can read the latest scheduler without a TDZ access.
+  const scheduleNextFrameRef = useRef<() => void>(() => {})
 
   const applyFrame = useCallback(
     (frame: CursorFrame) => {
@@ -29,7 +32,7 @@ export function AgentCursor({ cursor, isVisible, viewportSize, onArrived }: Agen
         onArrived?.(frame.arrivedMoveSequence)
       }
       if (frame.shouldContinue) {
-        scheduleNextFrame()
+        scheduleNextFrameRef.current()
       }
     },
     [onArrived],
@@ -47,6 +50,10 @@ export function AgentCursor({ cursor, isVisible, viewportSize, onArrived }: Agen
       tick()
     })
   }, [tick])
+
+  useEffect(() => {
+    scheduleNextFrameRef.current = scheduleNextFrame
+  }, [scheduleNextFrame])
 
   useEffect(() => {
     const motion = motionRef.current ?? new CursorMotion()

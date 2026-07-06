@@ -9,7 +9,7 @@
   display: flex;
   justify-content: center;
   overflow: hidden;
-  padding: var(--space-5);
+  padding: var(--space-6);
   position: relative;
 }
 
@@ -28,6 +28,7 @@
   aspect-ratio: 9 / 19.5;
   background: var(--phone-shell);
   background-image: none;
+  border: 6px solid var(--phone-shell);
   border-radius: 38px;
   box-shadow:
     0 0 0 1.5px rgba(0, 0, 0, 0.08),
@@ -46,7 +47,7 @@
   transition:
     border-radius var(--duration-moderate) var(--ease-productive),
     box-shadow var(--duration-moderate) var(--ease-productive);
-  width: min(100%, 420px);
+  width: min(100%, 390px);
 }
 
 .phone-frame::after {

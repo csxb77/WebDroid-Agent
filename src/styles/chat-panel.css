@@ -169,7 +169,7 @@
   align-items: center;
   background: var(--accent-soft);
   border: 1px solid var(--accent-soft-border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-2xl);
   color: var(--accent);
   display: flex;
   height: 56px;

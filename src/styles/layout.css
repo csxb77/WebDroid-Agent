@@ -222,8 +222,8 @@ h2 {
   display: grid;
   gap: var(--space-6);
   grid-template-columns:
-    minmax(280px, 320px)
-    minmax(380px, 440px)
+    minmax(320px, 360px)
+    minmax(400px, 500px)
     minmax(380px, 1fr);
   margin: 0 auto;
   max-width: 1480px;
@@ -233,7 +233,7 @@ h2 {
 }
 
 .workspace-config-collapsed {
-  grid-template-columns: 60px minmax(400px, 480px) minmax(380px, 1fr);
+  grid-template-columns: 64px minmax(420px, 520px) minmax(380px, 1fr);
 }
 
 .phone-column {
@@ -242,7 +242,7 @@ h2 {
   gap: var(--space-4);
   justify-self: center;
   min-width: 0;
-  width: min(100%, 440px);
+  width: min(100%, 500px);
 }
 
 /* ═══ Panels — Frosted Glass ═══ */

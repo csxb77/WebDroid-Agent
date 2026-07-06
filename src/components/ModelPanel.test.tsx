@@ -57,12 +57,15 @@ describe('ModelPanel', () => {
       />,
     )
 
-    const status = screen.getByRole('status', { name: 'Model configuration status' })
-
-    expect(status.className).toContain('needs-config')
-    expect(within(status).getByText('Needs API Key')).toBeTruthy()
-    expect(within(status).getByText('Required next')).toBeTruthy()
-    expect(screen.getByText('API Key is required before the agent can run.')).toBeTruthy()
+    // C-style: header badge carries the short status tone, help line spells out the missing field.
+    const headingBadge = document.querySelector('.config-section-badge.warning') as HTMLElement
+    expect(headingBadge).toBeTruthy()
+    expect(headingBadge.textContent).toContain('Setup')
+    expect(headingBadge.textContent).toContain('agent-model')
+    expect(
+      screen.getByText('API Key is required before the agent can run.'),
+    ).toBeTruthy()
+    expect(screen.queryByRole('status')).toBeNull()
     expect(screen.getByLabelText(/^api key$/i).closest('label, .api-key-setting')?.className).toContain(
       'missing',
     )
@@ -71,26 +74,24 @@ describe('ModelPanel', () => {
   it('shows a clear ready state when model configuration is complete', () => {
     render(<ModelPanel {...createModelPanelProps()} />)
 
-    const status = screen.getByRole('status', { name: 'Model configuration status' })
-
-    expect(status.className).toContain('ready')
-    expect(within(status).getByText('Ready to run')).toBeTruthy()
-    expect(within(status).getByText('agent-model')).toBeTruthy()
-    expect(within(status).getByText('WebDroid JSON')).toBeTruthy()
-    expect(screen.queryByText('Required next')).toBeNull()
+    const headingBadge = document.querySelector('.config-section-badge.ready') as HTMLElement
+    expect(headingBadge).toBeTruthy()
+    expect(headingBadge.textContent).toContain('Ready')
+    expect(headingBadge.textContent).not.toContain('Required next')
+    expect(headingBadge.textContent).toContain('agent-model')
+    // The action protocol is still available inside the settings form.
+    fireEvent.click(screen.getByText('Model settings'))
+    expect(screen.getByLabelText(/action protocol/i)).toBeTruthy()
+    expect(screen.queryByText(/is required before the agent can run/)).toBeNull()
   })
 
-  it('keeps the section badge short while the status card carries the full model state', () => {
+  it('keeps the section badge short with no separate verbose status card', () => {
     render(<ModelPanel {...createModelPanelProps()} />)
 
-    const headingBadge = screen.getByText('Ready')
-
-    expect(headingBadge.className).toContain('ready')
-    expect(headingBadge.textContent).toBe('Ready')
+    const headingBadge = document.querySelector('.config-section-badge.ready') as HTMLElement
+    expect(headingBadge.textContent).toBe('agent-model·Ready')
     expect(headingBadge.textContent).not.toBe('Ready to run')
-    expect(within(screen.getByRole('status', { name: 'Model configuration status' })).getByText(
-      'Ready to run',
-    )).toBeTruthy()
+    expect(screen.queryByRole('status', { name: 'Model configuration status' })).toBeNull()
   })
 
   it('labels provider choices as OpenAI compatible and Qwen', () => {

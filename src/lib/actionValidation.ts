@@ -531,7 +531,7 @@ function hasAllowedUriScheme(value: string): boolean {
     return false
   }
   const scheme = match[1].toLowerCase()
-  return ALLOWED_URI_SCHEMES.includes(scheme as any)
+  return (ALLOWED_URI_SCHEMES as readonly string[]).includes(scheme)
 }
 
 function clamp(value: number, min: number, max: number) {

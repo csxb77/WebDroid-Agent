@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DeviceScreenshot } from '../adapters/deviceTypes'
 import type { AgentStep } from '../lib/agent'
 import type { AgentAction } from '../lib/actionTypes'
@@ -59,7 +59,13 @@ function renderConversationPanel(
 }
 
 describe('ConversationPanel', () => {
+  beforeEach(() => {
+    // ponytail: jsdom's window.confirm returns undefined (falsy); delete-flow tests need true.
+    vi.stubGlobal('confirm', () => true)
+  })
+
   afterEach(() => {
+    vi.unstubAllGlobals()
     cleanup()
   })
 
@@ -146,7 +152,7 @@ describe('ConversationPanel', () => {
     expect(onCloseHistorySidebar).toHaveBeenCalledTimes(1)
   })
 
-  it('shows the searched term in the chat history empty state and clears it', () => {
+  it('shows the searched term in the chat history empty state and clears it', async () => {
     renderConversationPanel({
       historySidebarOpen: true,
       threadSummaries: [
@@ -164,13 +170,17 @@ describe('ConversationPanel', () => {
     const search = screen.getByRole('textbox', { name: /search chat history/i })
     fireEvent.change(search, { target: { value: 'billing' } })
 
-    expect(screen.getByText('No chats match "billing"')).toBeTruthy()
+    await waitFor(() =>
+      expect(screen.getByText('No chats match "billing"')).toBeTruthy(),
+    )
     expect(screen.queryByRole('button', { name: /open chat open wi-fi/i })).toBeNull()
 
     fireEvent.click(screen.getByText('Clear history search'))
 
     expect((search as HTMLInputElement).value).toBe('')
-    expect(screen.getByRole('button', { name: /open chat open wi-fi/i })).toBeTruthy()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /open chat open wi-fi/i })).toBeTruthy(),
+    )
     expect(screen.queryByText('No chats match "billing"')).toBeNull()
   })
 

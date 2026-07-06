@@ -240,6 +240,8 @@ describe('App', () => {
         }),
       ),
     })
+    // ponytail: jsdom's window.confirm returns undefined (falsy); delete-flow tests need true.
+    vi.stubGlobal('confirm', () => true)
   })
 
   afterEach(() => {
@@ -526,7 +528,8 @@ describe('App', () => {
 
     const configPanel = document.querySelector('.config-panel') as HTMLElement
     const modelSection = within(configPanel).getByRole('region', { name: /^model$/i })
-    expect(within(modelSection).getByText('gpt-5.5')).toBeTruthy()
+    // ponytail: badge renders `model·status` as sibling text nodes; regex matches the concatenated content.
+    expect(within(modelSection).getByText(/gpt-5\.5/)).toBeTruthy()
     const detailsToggle = screen.getByText('Model settings')
     const details = detailsToggle.closest('details')
 

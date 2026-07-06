@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- context+hooks colocated; hooks are stable, HMR hint not worth a file split */
 import { createContext, useContext, type ReactNode } from 'react'
 import type { AppCopy, Locale } from '../lib/appCopy'
 
