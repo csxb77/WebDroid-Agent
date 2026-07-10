@@ -141,16 +141,25 @@
   display: grid;
   gap: var(--space-3);
   justify-items: center;
+  min-height: 120px;
   max-width: 80%;
   padding: var(--space-4);
   text-align: center;
 }
 
 .phone-empty-state svg {
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.55);
   height: 40px;
   opacity: 1;
   width: 40px;
+}
+
+.phone-empty-state .spin {
+  color: var(--accent-soft-text);
+}
+
+.phone-screen-placeholder:not([aria-busy="true"]) .phone-empty-state > svg {
+  color: var(--accent-soft-text);
 }
 
 .phone-empty-state strong {

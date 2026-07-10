@@ -12,6 +12,7 @@ import {
   isModelProviderPreset,
   migrateProvider,
 } from './modelProviders'
+import type { ExportEnvelope } from './fileExport'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 export type LanguageMode = 'system' | 'zh-CN' | 'en-US'
@@ -38,6 +39,7 @@ export type AppSettings = {
 export type SettingsStorage = Pick<Storage, 'getItem' | 'setItem'>
 
 export const MIN_AGENT_STEPS = 1
+export const MAX_AGENT_STEPS = 500
 
 const SETTINGS_KEY = 'webdroid-agent-settings'
 // Keep the previous project keys so existing browser settings survive the rename to WebDroid Agent.
@@ -53,7 +55,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     apiKey: '',
     model: 'gpt-5.5',
   },
-  maxSteps: 50,
+  maxSteps: 150,
   memoryEnabled: false,
   taskNotificationsEnabled: false,
   preferAdbKeyboard: false,
@@ -100,7 +102,21 @@ function loadLegacySettings(storage: SettingsStorage): AppSettings {
   })
 }
 
-function normalizeSettings(candidate: unknown): AppSettings {
+export type SettingsExportEnvelope = ExportEnvelope<AppSettings>
+
+export function parseSettingsImport(value: unknown): AppSettings {
+  if (!isRecord(value)) {
+    return DEFAULT_SETTINGS
+  }
+
+  if (value.type === 'webdroid-agent-settings' && isRecord(value.data)) {
+    return normalizeSettings(value.data)
+  }
+
+  return normalizeSettings(value)
+}
+
+export function normalizeSettings(candidate: unknown): AppSettings {
   if (!isRecord(candidate)) {
     return DEFAULT_SETTINGS
   }
@@ -170,7 +186,7 @@ function readNumber(value: unknown, fallback: number) {
 }
 
 export function normalizeMaxSteps(value: unknown, fallback = DEFAULT_SETTINGS.maxSteps) {
-  return Math.max(readNumber(value, fallback), MIN_AGENT_STEPS)
+  return Math.min(Math.max(readNumber(value, fallback), MIN_AGENT_STEPS), MAX_AGENT_STEPS)
 }
 
 function readRangeNumber(value: unknown, fallback: number, min: number, max: number) {

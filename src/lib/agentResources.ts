@@ -27,11 +27,27 @@ export function loadSecretRecords(storage: AgentResourceStorage = localStorage) 
   }
 }
 
-export function saveSecretRecords(
+export async function loadSecretRecordsDecrypted(storage: AgentResourceStorage = localStorage) {
+  const records = loadSecretRecords(storage)
+  const { decryptSecretValue } = await import('./secretVault')
+  const decrypted: SecretRecord[] = []
+  for (const record of records) {
+    const value = await decryptSecretValue(record.value)
+    decrypted.push({ ...record, value })
+  }
+  return decrypted
+}
+
+export async function saveSecretRecords(
   records: readonly SecretRecord[],
   storage: AgentResourceStorage = localStorage,
 ) {
-  storage.setItem(SECRETS_KEY, serializeSecretRecords(records))
+  // Encrypt secret values at rest before persisting them, so a plain
+  // localStorage / export dump does not reveal secret values in cleartext.
+  const { encryptSecretValues } = await import('./secretVault')
+  const cloned = records.map((record) => ({ ...record }))
+  await encryptSecretValues(cloned)
+  storage.setItem(SECRETS_KEY, serializeSecretRecords(cloned))
 }
 
 export function serializeSecretRecords(records: readonly SecretRecord[]) {

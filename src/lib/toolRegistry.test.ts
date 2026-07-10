@@ -191,10 +191,34 @@ describe('ActionToolRegistry', () => {
     expect(device.executed).toEqual([])
   })
 
-  it('bypasses local safety policy in unrestricted mode', async () => {
+  it('bypasses local safety policy in unrestricted mode for non-irreversible actions', async () => {
     const device = fakeDevice()
     const registry = createDefaultActionToolRegistry()
     const confirmSensitiveAction = vi.fn(async () => false)
+
+    const result = await registry.execute(
+      { action: 'tap', x: 100, y: 200 },
+      {
+        device,
+        confirmSensitiveAction,
+        safetyContext: { task: 'Open the settings app' },
+        unrestrictedMode: true,
+      },
+    )
+
+    expect(result).toEqual({
+      success: true,
+      summary: 'tap executed',
+      toolName: 'tap',
+    })
+    expect(confirmSensitiveAction).not.toHaveBeenCalled()
+    expect(device.executed).toEqual(['tap'])
+  })
+
+  it('blocks irreversible payment actions even in unrestricted mode', async () => {
+    const device = fakeDevice()
+    const registry = createDefaultActionToolRegistry()
+    const confirmSensitiveAction = vi.fn(async () => true)
 
     const result = await registry.execute(
       { action: 'tap', x: 100, y: 200 },
@@ -207,12 +231,14 @@ describe('ActionToolRegistry', () => {
     )
 
     expect(result).toEqual({
-      success: true,
-      summary: 'tap executed',
+      success: false,
+      summary:
+        'Payment action blocked by safety policy. Payments, transfers, and checkouts always require manual takeover — even in unrestricted mode.',
       toolName: 'tap',
+      safetyDecision: 'block',
     })
     expect(confirmSensitiveAction).not.toHaveBeenCalled()
-    expect(device.executed).toEqual(['tap'])
+    expect(device.executed).toEqual([])
   })
 
   it('asks for local safety confirmation without relying on model risk metadata', async () => {

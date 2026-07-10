@@ -8,7 +8,7 @@ import {
 } from '../lib/appCards'
 import {
   loadCustomToolDefinitions,
-  loadSecretRecords,
+  loadSecretRecordsDecrypted,
   parseCustomToolDefinitionsJson,
   parseSecretRecordsJson,
   saveCustomToolDefinitions,
@@ -21,7 +21,9 @@ export function useLocalResourcesState() {
   const [appCards, setAppCards] = useState(() => loadAppCards())
   const [appCardsJson, setAppCardsJson] = useState(() => serializeAppCards(appCards))
   const [appCardsJsonError, setAppCardsJsonError] = useState<string | null>(null)
-  const [secretRecords, setSecretRecords] = useState(() => loadSecretRecords())
+  const [secretRecords, setSecretRecords] = useState<
+    ReturnType<typeof parseSecretRecordsJson>
+  >(() => parseSecretRecordsJson('[]'))
   const [secretRecordsJson, setSecretRecordsJson] = useState(() =>
     serializeSecretRecords(secretRecords),
   )
@@ -32,8 +34,26 @@ export function useLocalResourcesState() {
   )
   const [customToolsJsonError, setCustomToolsJsonError] = useState<string | null>(null)
 
+  // Decrypt any previously-encrypted secret values on mount, so the rest of the
+  // app works with plaintext values in memory while they remain encrypted at rest.
+  useEffect(() => {
+    let active = true
+    void loadSecretRecordsDecrypted().then((decrypted) => {
+      if (!active) {
+        return
+      }
+      setSecretRecords(decrypted)
+      setSecretRecordsJson(serializeSecretRecords(decrypted))
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
   useEffect(() => saveAppCards(appCards), [appCards])
-  useEffect(() => saveSecretRecords(secretRecords), [secretRecords])
+  useEffect(() => {
+    void saveSecretRecords(secretRecords)
+  }, [secretRecords])
   useEffect(() => saveCustomToolDefinitions(customTools), [customTools])
 
   function updateAppCardsJson(value: string) {

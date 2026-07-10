@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_SETTINGS,
   loadSettings,
+  normalizeSettings,
+  parseSettingsImport,
   saveSettings,
   type AppSettings,
   type SettingsStorage,
@@ -272,5 +274,33 @@ describe('settings persistence', () => {
         }),
       ),
     ).toEqual(persisted)
+  })
+})
+
+describe('settings import', () => {
+  it('normalizes unknown values back to defaults', () => {
+    expect(normalizeSettings(null)).toEqual(DEFAULT_SETTINGS)
+    expect(normalizeSettings({ maxSteps: 'bad' })).toEqual(DEFAULT_SETTINGS)
+  })
+
+  it('parses a wrapped settings envelope', () => {
+    const persisted: AppSettings = { ...DEFAULT_SETTINGS, maxSteps: 80 }
+    const parsed = parseSettingsImport({
+      type: 'webdroid-agent-settings',
+      version: 1,
+      exportedAt: 1000,
+      data: persisted,
+    })
+    expect(parsed).toEqual(persisted)
+  })
+
+  it('tolerates a bare settings object without an envelope', () => {
+    const persisted: AppSettings = { ...DEFAULT_SETTINGS, maxSteps: 33 }
+    expect(parseSettingsImport(persisted)).toEqual(persisted)
+  })
+
+  it('returns defaults for garbage input', () => {
+    expect(parseSettingsImport('not-an-object')).toEqual(DEFAULT_SETTINGS)
+    expect(parseSettingsImport({ type: 'unknown' })).toEqual(DEFAULT_SETTINGS)
   })
 })

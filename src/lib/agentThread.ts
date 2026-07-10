@@ -768,3 +768,42 @@ function cloneValue<Value>(value: Value): Value {
 function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
+
+export function isAgentThread(value: unknown): value is AgentThread {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false
+  }
+
+  const candidate = value as Record<string, unknown>
+  return (
+    typeof candidate.id === 'string' &&
+    candidate.id.trim() !== '' &&
+    typeof candidate.status === 'string' &&
+    Array.isArray(candidate.turns) &&
+    Array.isArray(candidate.messages) &&
+    typeof candidate.createdAt === 'number' &&
+    Number.isFinite(candidate.createdAt) &&
+    typeof candidate.updatedAt === 'number' &&
+    Number.isFinite(candidate.updatedAt)
+  )
+}
+
+export function parseChatHistoryImport(value: unknown): AgentThread[] {
+  if (typeof value !== 'object' || value === null) {
+    return []
+  }
+
+  if (Array.isArray(value)) {
+    return value.filter(isAgentThread)
+  }
+
+  const candidate = value as Record<string, unknown>
+  if (candidate.type === 'webdroid-agent-chat-history' && candidate.data != null) {
+    const data = candidate.data as Record<string, unknown>
+    if (Array.isArray(data.threads)) {
+      return data.threads.filter(isAgentThread)
+    }
+  }
+
+  return []
+}

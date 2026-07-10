@@ -96,7 +96,7 @@ The app stores these values in the current browser's `localStorage`:
 - `Model`: model name, default `gpt-5.5`.
 - `Thinking depth`: `reasoning_effort` for reasoning models such as GPT-5.5. Use the provider default, or choose `none`, `minimal`, `low`, `medium`, `high`, or `xhigh`.
 - `Action protocol`: model action protocol. `webdroid_json` uses screenshot pixel coordinates; `webdroid_normalized_json` uses 0-1000 normalized coordinates.
-- `Max steps`: maximum auto-execution steps, default `50`.
+- `Max steps`: maximum auto-execution steps, default `150`.
 - `Confirm sensitive actions`: whether sensitive taps require human confirmation, default on.
 - `Unrestricted mode`: bypass local safety policy and sensitive confirmations, and prompt the model not to request human takeover.
 - `Stream responses`: whether to use streaming responses, default off.

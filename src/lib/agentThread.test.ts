@@ -3,6 +3,8 @@ import type { DeviceScreenshot } from '../adapters/deviceTypes'
 import type { AgentAction } from './actionTypes'
 import {
   createAgentThread,
+  isAgentThread,
+  parseChatHistoryImport,
   recoverInterruptedThread,
   recordThreadFinalResponse,
   recordThreadStatus,
@@ -238,5 +240,34 @@ describe('agent thread model', () => {
         }),
       ]),
     )
+  })
+
+  it('identifies agent threads for import validation', () => {
+    const thread = createAgentThread('Open Settings', { id: 'thread-1', now: 1000 })
+
+    expect(isAgentThread(thread)).toBe(true)
+    expect(isAgentThread(null)).toBe(false)
+    expect(isAgentThread({})).toBe(false)
+    expect(isAgentThread({ id: 1, turns: [], messages: [] })).toBe(false)
+    expect(isAgentThread({ id: 'x', turns: [], messages: [], status: 'idle', createdAt: 1, updatedAt: 1 })).toBe(true)
+  })
+
+  it('parses chat history imports from envelope or bare arrays', () => {
+    const threadA = createAgentThread('Task A', { id: 'thread-a', now: 1000 })
+    const threadB = createAgentThread('Task B', { id: 'thread-b', now: 2000 })
+    const invalid = { id: 'thread-bad', turns: 'not-an-array', messages: [] }
+
+    expect(parseChatHistoryImport(null)).toEqual([])
+    expect(parseChatHistoryImport({ type: 'unknown' })).toEqual([])
+    expect(parseChatHistoryImport([threadA, threadB])).toEqual([threadA, threadB])
+    expect(parseChatHistoryImport([threadA, invalid, threadB])).toEqual([threadA, threadB])
+    expect(
+      parseChatHistoryImport({
+        type: 'webdroid-agent-chat-history',
+        version: 1,
+        exportedAt: 100,
+        data: { threads: [threadA, invalid, threadB] },
+      }),
+    ).toEqual([threadA, threadB])
   })
 })

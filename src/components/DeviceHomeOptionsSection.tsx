@@ -73,12 +73,19 @@ export function DeviceHomeOptionsSection({
           />
           <span>{copy.confirmSensitiveActions}</span>
         </label>
-        <label className="toggle" htmlFor={unrestrictedModeInputId}>
+        <label
+          className="toggle"
+          htmlFor={unrestrictedModeInputId}
+          title={options.unrestrictedMode ? copy.unrestrictedModeEnabledBanner : undefined}
+        >
           <input
             id={unrestrictedModeInputId}
             name="unrestrictedMode"
             type="checkbox"
             checked={options.unrestrictedMode}
+            // `onUnrestrictedModeChange` is wired (in App.tsx) to a confirmation
+            // dialog when enabling, so we pass the raw checkbox value through and
+            // let the parent decide whether to actually apply it.
             onChange={(event) => actions.onUnrestrictedModeChange(event.target.checked)}
           />
           <span>{copy.unrestrictedMode}</span>

@@ -228,4 +228,27 @@ describe('thread store', () => {
     })
     expect(JSON.stringify(snapshot)).not.toContain('secret-key')
   })
+
+  it('loadAll returns every thread newest-first as clones', async () => {
+    const store = createMemoryThreadStore()
+    const first = createAgentThread('First task', { id: 'thread-1', now: 1000 })
+    const second = createAgentThread('Second task', { id: 'thread-2', now: 2000 })
+
+    await store.save(first)
+    await store.save(second)
+
+    const all = await store.loadAll()
+    expect(all.map((thread) => thread.id)).toEqual(['thread-2', 'thread-1'])
+
+    const loadedFirst = all.find((thread) => thread.id === 'thread-1')
+    recordThreadUserMessage(loadedFirst!, 'Mutated after load', { now: 3000 })
+    expect((await store.load('thread-1'))?.messages.map((message) => message.content)).toEqual([
+      'First task',
+    ])
+  })
+
+  it('loadAll on an empty store returns an empty array', async () => {
+    const store = createMemoryThreadStore()
+    expect(await store.loadAll()).toEqual([])
+  })
 })

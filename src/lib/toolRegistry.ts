@@ -7,6 +7,7 @@ import {
 } from './agentResources'
 import {
   evaluateActionSafety,
+  evaluateIrreversibleSafety,
   type ActionSafetyContext,
   type ActionSafetyDecision,
 } from './actionSafetyPolicy'
@@ -42,6 +43,12 @@ export type ActionToolContext = {
   screenshotRecallThread?: AgentThread
   signal?: AbortSignal
   unrestrictedMode?: boolean
+  /**
+   * Invoked when an irreversible action (factory reset, account deletion, payment)
+   * is blocked even in unrestricted mode. Lets the caller log the event to the
+   * persistent audit log.
+   */
+  onIrreversibleBlocked?: (action: AgentAction, message: string) => void
 }
 
 type ActionToolEntry<Action extends AgentAction = AgentAction> = ActionToolSignature & {
@@ -343,6 +350,22 @@ export class ActionToolRegistry {
     const safety = context.unrestrictedMode
       ? ({ decision: 'allow' } as const)
       : evaluateActionSafety(action, context.safetyContext)
+
+    // Irreversible actions are still blocked in unrestricted mode — they require
+    // manual takeover regardless of configuration.
+    if (context.unrestrictedMode) {
+      const irreversible = evaluateIrreversibleSafety(action, context.safetyContext)
+      if (irreversible && (irreversible.decision === 'block' || irreversible.decision === 'take_over')) {
+        context.onIrreversibleBlocked?.(action, irreversible.message ?? '')
+        return {
+          toolName,
+          success: false,
+          summary: irreversible.message ?? `Safety policy blocked ${toolName}.`,
+          safetyDecision: irreversible.decision,
+        }
+      }
+    }
+
     if (safety.decision === 'block' || safety.decision === 'take_over') {
       return {
         toolName,

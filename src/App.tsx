@@ -19,9 +19,11 @@ import { isGeminiProvider } from './lib/geminiTypes'
 import type { ModelConfig } from './lib/openAiTypes'
 import { OPENAI_PROXY_URL } from './lib/openAiRuntimeConfig'
 import { APP_COPY, resolveLocale } from './lib/appCopy'
-import { loadSettings, normalizeMaxSteps, type AppSettings } from './lib/settings'
+import { loadSettings, normalizeMaxSteps, parseSettingsImport, type AppSettings } from './lib/settings'
 import { createDefaultActionToolRegistry, type ActionToolName } from './lib/toolRegistry'
 import { loadMemoryItems, rememberMemoryItem, saveMemoryItems } from './lib/memory'
+import { downloadJsonFile, pickAndReadJsonFile } from './lib/fileExport'
+import { parseChatHistoryImport } from './lib/agentThread'
 import {
   requestTaskNotificationPermission,
   showTaskNotification,
@@ -49,6 +51,9 @@ import {
   SensitiveActionDialog,
   type SensitiveActionDialogRequest,
 } from './components/SensitiveActionDialog'
+import { UnrestrictedModeConfirmDialog } from './components/UnrestrictedModeConfirmDialog'
+import { appendAuditEntry } from './lib/auditLog'
+import { buildActionPreview } from './lib/actionPreview'
 
 function createModelClient(modelConfig: ModelConfig) {
   if (isGeminiProvider(modelConfig.provider)) {
@@ -145,6 +150,11 @@ function App() {
     sensitiveActionResolverRef.current?.(confirmed)
     sensitiveActionResolverRef.current = null
     setSensitiveActionRequest(null)
+    if (confirmed) {
+      appendAuditEntry({ type: 'sensitive_action_confirmed', timestamp: Date.now() })
+    } else {
+      appendAuditEntry({ type: 'sensitive_action_cancelled', timestamp: Date.now() })
+    }
   }, [])
   const resetPendingStep = useCallback(() => setPendingStep(null), [])
   const device = useDeviceController({
@@ -166,7 +176,55 @@ function App() {
     preferAdbKeyboard,
     unrestrictedMode,
   } = device.options
+
+  // Unrestricted-mode enable confirmation: gate the toggle behind a dialog so a
+  // single checkbox click (or a malicious settings import) cannot silently arm
+  // autonomous execution of sensitive operations.
+  const [unrestrictedConfirmOpen, setUnrestrictedConfirmOpen] = useState(false)
+  const unrestrictedResolverRef = useRef<((confirmed: boolean) => void) | null>(null)
+  const requestUnrestrictedModeConfirmation = useCallback(() => {
+    return new Promise<boolean>((resolve) => {
+      unrestrictedResolverRef.current = resolve
+      setUnrestrictedConfirmOpen(true)
+    })
+  }, [])
+  const settleUnrestrictedModeConfirmation = useCallback((confirmed: boolean) => {
+    unrestrictedResolverRef.current?.(confirmed)
+    unrestrictedResolverRef.current = null
+    setUnrestrictedConfirmOpen(false)
+  }, [])
+  const handleUnrestrictedModeChange = useCallback(
+    (value: boolean) => {
+      if (!value) {
+        appendAuditEntry({
+          type: 'unrestricted_mode_disabled',
+          timestamp: Date.now(),
+        })
+        device.actions.onUnrestrictedModeChange(false)
+        return
+      }
+      void requestUnrestrictedModeConfirmation().then((confirmed) => {
+        if (!confirmed) {
+          return
+        }
+        appendAuditEntry({
+          type: 'unrestricted_mode_enabled',
+          timestamp: Date.now(),
+        })
+        device.actions.onUnrestrictedModeChange(true)
+      })
+    },
+    [device.actions, requestUnrestrictedModeConfirmation],
+  )
   const hasModelConfig = Boolean(modelConfig.baseUrl && modelConfig.apiKey && modelConfig.model)
+  const handleIrreversibleBlocked = useCallback((action: AgentAction, message: string) => {
+    const detail = `${buildActionPreview(action)} — ${message}`
+    appendAuditEntry({
+      type: 'irreversible_action_blocked',
+      timestamp: Date.now(),
+      detail,
+    })
+  }, [])
   const currentSettings = useMemo<AppSettings>(
     () => ({
       actionProtocol,
@@ -269,6 +327,8 @@ function App() {
     conversation,
     deleteHistoryThread: deleteStoredHistoryThread,
     ensureSession,
+    exportChatHistory,
+    importChatHistory,
     interactionItems,
     selectHistoryThread: selectStoredHistoryThread,
     sessionSummary,
@@ -317,6 +377,7 @@ function App() {
     streamResponses,
     syncConversation,
     unrestrictedMode,
+    onIrreversibleBlocked: handleIrreversibleBlocked,
   })
 
   function updateConfig<Key extends keyof ModelConfig>(key: Key, value: ModelConfig[Key]) {
@@ -327,6 +388,85 @@ function App() {
 
   function updateMaxSteps(value: number) {
     setMaxSteps((current) => normalizeMaxSteps(value, current))
+  }
+
+  function applySettings(next: AppSettings) {
+    setModelConfig(next.modelConfig)
+    setActionProtocol(next.actionProtocol)
+    setDisabledActionTools(next.disabledActionTools)
+    setMaxSteps(next.maxSteps)
+    setMemoryEnabled(next.memoryEnabled)
+    setScreenBlackoutDuringAutoControl(next.screenBlackoutDuringAutoControl)
+    setStreamResponses(next.streamResponses)
+    setTaskNotificationsEnabled(next.taskNotificationsEnabled)
+    setThemeMode(next.themeMode)
+    setLanguageMode(next.languageMode)
+    device.actions.onPreferAdbKeyboardChange(next.preferAdbKeyboard)
+    device.actions.onConfirmSensitiveActionsChange(next.confirmSensitiveActions)
+    device.actions.onUnrestrictedModeChange(next.unrestrictedMode)
+    device.actions.onActionSettleMsChange(next.actionSettleMs)
+    device.actions.onDoubleTapIntervalMsChange(next.doubleTapIntervalMs)
+    device.actions.onKeyboardStepMsChange(next.keyboardStepMs)
+  }
+
+  async function handleExportChatHistory() {
+    const result = await exportChatHistory()
+    if (!result) {
+      return
+    }
+    downloadJsonFile('webdroid-agent-chat-history.json', {
+      type: 'webdroid-agent-chat-history',
+      version: 1,
+      exportedAt: Date.now(),
+      data: { threads: result.threads },
+    })
+    addLog({ tone: 'info', title: copy.chatHistoryExported(result.count) })
+  }
+
+  async function handleImportChatHistory() {
+    let parsed: unknown
+    try {
+      parsed = await pickAndReadJsonFile()
+    } catch (caught) {
+      const detail = caught instanceof Error ? caught.message : String(caught)
+      addLog({ tone: 'warn', title: copy.importInvalidFile, detail })
+      return
+    }
+    if (parsed === null) {
+      return
+    }
+    const threads = parseChatHistoryImport(parsed)
+    if (threads.length === 0) {
+      addLog({ tone: 'warn', title: copy.importInvalidFile })
+      return
+    }
+    await importChatHistory(threads)
+  }
+
+  function handleExportSettings() {
+    downloadJsonFile('webdroid-agent-settings.json', {
+      type: 'webdroid-agent-settings',
+      version: 1,
+      exportedAt: Date.now(),
+      data: currentSettings,
+    })
+    addLog({ tone: 'info', title: copy.settingsExported })
+  }
+
+  async function handleImportSettings() {
+    let parsed: unknown
+    try {
+      parsed = await pickAndReadJsonFile()
+    } catch (caught) {
+      const detail = caught instanceof Error ? caught.message : String(caught)
+      addLog({ tone: 'warn', title: copy.importInvalidFile, detail })
+      return
+    }
+    if (parsed === null) {
+      return
+    }
+    applySettings(parseSettingsImport(parsed))
+    addLog({ tone: 'info', title: copy.settingsImported })
   }
 
   function startNewChat() {
@@ -429,6 +569,16 @@ function App() {
               }}
               onClearRunLog={clearLogs}
               onClose={() => setSettingsOpen(false)}
+              onExportChatHistory={() => {
+                void handleExportChatHistory()
+              }}
+              onExportSettings={handleExportSettings}
+              onImportChatHistory={() => {
+                void handleImportChatHistory()
+              }}
+              onImportSettings={() => {
+                void handleImportSettings()
+              }}
               onLanguageModeChange={setLanguageMode}
               onMaxStepsChange={updateMaxSteps}
               onResetAppCards={resetAppCards}
@@ -459,6 +609,14 @@ function App() {
           onConfirm={() => settleSensitiveActionRequest(true)}
         />
 
+        {unrestrictedConfirmOpen ? (
+          <UnrestrictedModeConfirmDialog
+            copy={copy}
+            onCancel={() => settleUnrestrictedModeConfirmation(false)}
+            onConfirm={() => settleUnrestrictedModeConfirmation(true)}
+          />
+        ) : null}
+
         {error ? (
           <div className="alert">
             <AlertTriangle size={18} />
@@ -472,7 +630,7 @@ function App() {
           }
         >
           <ConfigSidebar
-            deviceActions={device.actions}
+            deviceActions={{ ...device.actions, onUnrestrictedModeChange: handleUnrestrictedModeChange }}
             deviceOptions={device.options}
             deviceState={device.state}
             isOpen={configSidebarOpen}
@@ -494,6 +652,7 @@ function App() {
             <PhoneStage
               busyTask={busyTask}
               copy={copy}
+              deviceConnected={device.connected}
               displayedScreenshot={device.displayedScreenshot}
               onRunInteractiveAction={device.runScreenshotAction}
               pendingStep={pendingStep}

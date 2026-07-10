@@ -112,8 +112,8 @@ describe('mapActionCoordinates', () => {
       action: 'swipe',
       fromX: 100,
       fromY: 200,
-      toX: 900,
-      toY: 1800,
+      toX: 899,
+      toY: 1799,
       durationMs: 600,
       reason: 'scroll',
     })
@@ -128,7 +128,7 @@ describe('mapActionCoordinates', () => {
 
     expect(
       mapActionCoordinates({ action: 'double_tap', x: 400, y: 750 }, modelScreen, deviceScreen),
-    ).toEqual({ action: 'double_tap', x: 800, y: 1500 })
+    ).toEqual({ action: 'double_tap', x: 799, y: 1499 })
   })
 
   it('clamps mapped touch coordinates to the target screen edge', () => {

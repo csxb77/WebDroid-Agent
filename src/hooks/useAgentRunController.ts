@@ -76,6 +76,7 @@ type UseAgentRunControllerInput = {
   streamResponses: boolean
   syncConversation: () => void
   unrestrictedMode: boolean
+  onIrreversibleBlocked?: (action: AgentAction, message: string) => void
 }
 
 export function useAgentRunController({
@@ -108,6 +109,7 @@ export function useAgentRunController({
   streamResponses,
   syncConversation,
   unrestrictedMode,
+  onIrreversibleBlocked,
 }: UseAgentRunControllerInput) {
   const abortRef = useRef<AbortController | null>(null)
   const pendingAbortRef = useRef<AbortController | null>(null)
@@ -169,6 +171,7 @@ export function useAgentRunController({
         secrets,
         screenshotRecallThread: ensureSession(),
         signal: pendingAbort.signal,
+        onIrreversibleBlocked,
       })
       recordAgentStepExecutionDuration(pendingStep, performance.now() - executionStartedAt)
       pendingStep.toolName = result.toolName
@@ -214,6 +217,7 @@ export function useAgentRunController({
     device,
     ensureSession,
     memoryEnabled,
+    onIrreversibleBlocked,
     onMemoryItem,
     onRunEndNotification,
     modelConfig,

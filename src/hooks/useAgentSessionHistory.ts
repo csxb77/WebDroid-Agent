@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createAgentSession, type AgentSession } from '../lib/agent'
-import { recoverInterruptedThread, type AgentThreadStatus } from '../lib/agentThread'
+import {
+  recoverInterruptedThread,
+  type AgentThread,
+  type AgentThreadStatus,
+} from '../lib/agentThread'
 import type { AppCopy } from '../lib/appCopy'
 import { buildInteractionStream } from '../lib/interactionStream'
 import type { AgentConversationMessage } from '../lib/openAiTypes'
@@ -203,6 +207,46 @@ export function useAgentSessionHistory({
     }
   }, [addLog, applySessionState, copyRef, currentSettings, threadStore])
 
+  const exportChatHistory = useCallback(async () => {
+    if (!threadStoreReady) {
+      return null
+    }
+    try {
+      const threads = await threadStore.loadAll()
+      return { count: threads.length, threads }
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught)
+      addLog({ tone: 'warn', title: copyRef.current.agentContextRestoreSkipped, detail: message })
+      return null
+    }
+  }, [addLog, copyRef, threadStore, threadStoreReady])
+
+  const importChatHistory = useCallback(
+    async (threads: AgentThread[]) => {
+      if (!threadStoreReady) {
+        return 0
+      }
+      let imported = 0
+      try {
+        for (const thread of threads) {
+          // save() overwrites on matching id (IDB put semantics); importing a
+          // thread with an existing id replaces it.
+          await threadStore.save(thread)
+          imported += 1
+        }
+        const summaries = await threadStore.list()
+        applyThreadSummaries(summaries)
+        addLog({ tone: 'info', title: copyRef.current.chatHistoryImported(imported) })
+        return imported
+      } catch (caught) {
+        const message = caught instanceof Error ? caught.message : String(caught)
+        addLog({ tone: 'warn', title: copyRef.current.agentContextRestoreSkipped, detail: message })
+        return imported
+      }
+    },
+    [addLog, applyThreadSummaries, copyRef, threadStore, threadStoreReady],
+  )
+
   useEffect(() => {
     let cancelled = false
 
@@ -271,6 +315,8 @@ export function useAgentSessionHistory({
     conversation,
     deleteHistoryThread,
     ensureSession: () => sessionRef.current,
+    exportChatHistory,
+    importChatHistory,
     interactionItems,
     selectHistoryThread,
     sessionSummary,

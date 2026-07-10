@@ -312,7 +312,6 @@ describe('App', () => {
     const dialog = await screen.findByRole('dialog', { name: /settings/i })
     selectSettingsTab(dialog, /project/i)
 
-    expect(within(dialog).getByText('Version')).toBeTruthy()
     expect(within(dialog).getByText(packageVersion)).toBeTruthy()
   })
 
@@ -815,7 +814,7 @@ describe('App', () => {
 
     const settingsDialog = await screen.findByRole('dialog', { name: /settings/i })
     expect(settingsDialog).toBeTruthy()
-    expect((within(settingsDialog).getByLabelText(/max steps/i) as HTMLInputElement).value).toBe('50')
+    expect((within(settingsDialog).getByLabelText(/max steps/i) as HTMLInputElement).value).toBe('150')
     expect(within(settingsDialog).queryByLabelText(/memory/i)).toBeNull()
     expect(within(settingsDialog).queryByLabelText(/dim screen during auto control/i)).toBeNull()
     const configPanel = document.querySelector('.config-panel') as HTMLElement

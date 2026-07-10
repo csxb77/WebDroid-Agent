@@ -58,6 +58,96 @@ describe('PhoneStage', () => {
     expect(screen.queryByLabelText('Screenshot zoom controls')).toBeNull()
   })
 
+  it('shows a connecting state while the device is connecting', () => {
+    render(
+      <PhoneStage
+        copy={APP_COPY['en-US']}
+        displayedScreenshot={null}
+        pendingStep={null}
+        busyTask={{ id: 'connect-device', label: 'Connect device', startedAt: 0 }}
+      />,
+    )
+
+    const placeholder = document.querySelector('.phone-screen-placeholder') as HTMLElement
+    expect(screen.getByLabelText('Connecting…')).toBeTruthy()
+    expect(placeholder.getAttribute('aria-busy')).toBe('true')
+    expect(placeholder.querySelector('.spin')).toBeTruthy()
+    expect(screen.queryByText('Connect and capture to show the live screen here')).toBeNull()
+  })
+
+  it('shows a capturing state while the screen is being captured', () => {
+    render(
+      <PhoneStage
+        copy={APP_COPY['en-US']}
+        displayedScreenshot={null}
+        pendingStep={null}
+        busyTask={{ id: 'capture-screen', label: 'Capture screen', startedAt: 0 }}
+      />,
+    )
+
+    expect(screen.getByLabelText('Capturing screen…')).toBeTruthy()
+    expect(document.querySelector('.phone-screen-placeholder')?.getAttribute('aria-busy')).toBe('true')
+  })
+
+  it('shows a disconnecting state while the device is disconnecting', () => {
+    render(
+      <PhoneStage
+        copy={APP_COPY['en-US']}
+        displayedScreenshot={null}
+        pendingStep={null}
+        busyTask={{ id: 'disconnect-device', label: 'Disconnect device', startedAt: 0 }}
+      />,
+    )
+
+    expect(screen.getByLabelText('Disconnecting…')).toBeTruthy()
+  })
+
+  it('shows a connected-waiting state when the device is connected but no screenshot exists', () => {
+    render(
+      <PhoneStage
+        copy={APP_COPY['en-US']}
+        displayedScreenshot={null}
+        pendingStep={null}
+        deviceConnected
+      />,
+    )
+
+    const placeholder = document.querySelector('.phone-screen-placeholder') as HTMLElement
+    expect(screen.getByLabelText('Device connected')).toBeTruthy()
+    expect(placeholder.getAttribute('aria-busy')).toBeNull()
+    expect(placeholder.querySelector('.spin')).toBeNull()
+    expect(screen.getByText('Connect and capture to show the live screen here')).toBeTruthy()
+  })
+
+  it('keeps the capturing state when a capture-screen busy task is in flight even when the device is connected', () => {
+    render(
+      <PhoneStage
+        copy={APP_COPY['en-US']}
+        displayedScreenshot={null}
+        pendingStep={null}
+        busyTask={{ id: 'capture-screen', label: 'Capture screen', startedAt: 0 }}
+        deviceConnected
+      />,
+    )
+
+    expect(screen.getByLabelText('Capturing screen…')).toBeTruthy()
+    expect(
+      document.querySelector('.phone-screen-placeholder')?.getAttribute('aria-busy'),
+    ).toBe('true')
+  })
+
+  it('shows the idle placeholder with a hint when no screenshot and no busy task', () => {
+    render(
+      <PhoneStage copy={APP_COPY['en-US']} displayedScreenshot={null} pendingStep={null} />,
+    )
+
+    const placeholder = document.querySelector('.phone-screen-placeholder') as HTMLElement
+    expect(screen.getByLabelText('No screenshot')).toBeTruthy()
+    expect(placeholder.getAttribute('aria-busy')).toBeNull()
+    expect(placeholder.querySelector('.spin')).toBeNull()
+    expect(screen.getByText('Connect and capture to show the live screen here')).toBeTruthy()
+  })
+
   it('creates a tap action from a screenshot click', () => {
     const onRunInteractiveAction = vi.fn()
     render(

@@ -133,6 +133,42 @@ export function evaluateActionSafety(
   return ALLOW
 }
 
+/**
+ * Irreversible actions are always blocked (require manual takeover) regardless of
+ * `unrestrictedMode`. These are operations like factory reset, account deletion, and
+ * payment/wire transfer that cannot be undone once executed.
+ */
+export function evaluateIrreversibleSafety(
+  action: AgentAction,
+  context: ActionSafetyContext = {},
+): ActionSafetyPolicyResult | null {
+  if (!MUTATING_ACTIONS.has(action.action)) {
+    return null
+  }
+
+  const evidence = collectPolicyEvidence(action, context)
+
+  if (matchesAny(evidence.all, DESTRUCTIVE_CRITICAL_PATTERNS)) {
+    return {
+      decision: 'block',
+      category: 'critical_destructive',
+      message:
+        'Irreversible action blocked by safety policy. Factory reset, account deletion, and similar operations always require manual takeover — even in unrestricted mode.',
+    }
+  }
+
+  if (matchesAny(evidence.all, PAYMENT_CRITICAL_PATTERNS)) {
+    return {
+      decision: 'block',
+      category: 'payment',
+      message:
+        'Payment action blocked by safety policy. Payments, transfers, and checkouts always require manual takeover — even in unrestricted mode.',
+    }
+  }
+
+  return null
+}
+
 function collectPolicyEvidence(action: AgentAction, context: ActionSafetyContext) {
   const actionFields = [
     'reason' in action ? action.reason : undefined,

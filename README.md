@@ -137,7 +137,7 @@ npm run preview
 - `Model`：模型名称，默认 `gpt-5.5`。
 - `Thinking depth`：GPT-5.5 等推理模型的 `reasoning_effort`，可使用服务默认值，或选择 `none`、`minimal`、`low`、`medium`、`high`、`xhigh`。
 - `Action protocol`：模型动作协议。`webdroid_json` 使用截图像素坐标；`webdroid_normalized_json` 使用 0-1000 归一化坐标。
-- `Max steps`：自动执行的最大步数，默认 `50`。
+- `Max steps`：自动执行的最大步数，默认 `150`。
 - `Confirm sensitive actions`：敏感点击是否需要人工确认，默认开启。
 - `完全无限制模式`：绕过本地安全策略和敏感确认，模型也会被提示不要请求人工接管。
 - `Stream responses`：是否启用流式响应，默认关闭。

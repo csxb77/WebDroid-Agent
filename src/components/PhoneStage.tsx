@@ -1,4 +1,4 @@
-import { Check, ImageOff, Maximize2, Minimize2, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { Check, Loader2, Maximize2, Minimize2, RotateCcw, Usb, X, ZoomIn, ZoomOut } from 'lucide-react'
 import {
   useEffect,
   useId,
@@ -27,6 +27,7 @@ export type PhoneStageProps = {
   pendingStep: AgentStep | null
   busyTask?: BusyTask | null
   runningAgent?: boolean
+  deviceConnected?: boolean
 }
 
 export function PhoneStage({
@@ -36,6 +37,7 @@ export function PhoneStage({
   pendingStep,
   busyTask = null,
   runningAgent = false,
+  deviceConnected = false,
 }: PhoneStageProps) {
   const [draftAction, setDraftAction] = useState<AgentAction | null>(null)
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null)
@@ -49,6 +51,36 @@ export function PhoneStage({
   const hasScreenshot = displayedScreenshot !== null
   const isFullscreenPreview = hasScreenshot && fullscreen
   const isAgentRunning = busyTask?.id === 'run-agent' || runningAgent
+
+  // ponytail: busier states reuse the busyTask signal useDeviceController already sets
+  // (runTask ids 'connect-device'/'capture-screen'/'disconnect-device') — no new state needed.
+  type PlaceholderState =
+    | 'connecting'
+    | 'capturing'
+    | 'disconnecting'
+    | 'connected-waiting'
+    | 'idle'
+  const placeholderState: PlaceholderState =
+    busyTask?.id === 'connect-device'
+      ? 'connecting'
+      : busyTask?.id === 'capture-screen'
+        ? 'capturing'
+        : busyTask?.id === 'disconnect-device'
+          ? 'disconnecting'
+          : deviceConnected && !displayedScreenshot
+            ? 'connected-waiting'
+            : 'idle'
+  const placeholderLabel =
+    placeholderState === 'connecting'
+      ? copy.connectingDevice
+      : placeholderState === 'capturing'
+        ? copy.capturingScreen
+        : placeholderState === 'disconnecting'
+          ? copy.disconnectingDevice
+          : placeholderState === 'connected-waiting'
+            ? copy.deviceConnected
+            : copy.noScreenshot
+  const isPlaceholderBusy = placeholderState !== 'idle' && placeholderState !== 'connected-waiting'
 
   useBodyOverflow(isFullscreenPreview)
 
@@ -67,11 +99,12 @@ export function PhoneStage({
         y: (actionY / ss.height) * containerHeight,
         visible: true,
         animateMovement: true,
+        moveSequence: pendingStep.index,
       }
     }
     return null
   })()
-  const stageLabel = displayedScreenshot ? copy.androidScreenshot : copy.noScreenshot
+  const stageLabel = displayedScreenshot ? copy.androidScreenshot : placeholderLabel
   const stageClassName = [
     'phone-stage',
     isFullscreenPreview ? 'phone-stage-fullscreen' : '',
@@ -279,11 +312,15 @@ export function PhoneStage({
                   </span>
                 </ScreenshotLightbox>
               ) : (
-                <div className="phone-screen-placeholder">
+                <div className="phone-screen-placeholder" aria-busy={isPlaceholderBusy || undefined}>
                   <div className="phone-empty-state">
-                    <ImageOff size={22} aria-hidden="true" />
-                    <strong>{copy.noScreenshot}</strong>
-                    <span>{copy.noScreenshotHint}</span>
+                    {isPlaceholderBusy ? (
+                      <Loader2 size={22} aria-hidden="true" className="spin" />
+                    ) : (
+                      <Usb size={22} aria-hidden="true" />
+                    )}
+                    <strong>{placeholderLabel}</strong>
+                    {isPlaceholderBusy ? null : <span>{copy.noScreenshotHint}</span>}
                   </div>
                 </div>
               )}

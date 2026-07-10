@@ -149,6 +149,12 @@ function responseHeaders(filePath, distDir) {
   return {
     'Content-Type': contentType(filePath),
     'Cache-Control': cacheControl(filePath, distDir),
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy': 'usb=(self), camera=(), microphone=(), geolocation=()',
+    'Content-Security-Policy':
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://dashscope.aliyuncs.com; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
   }
 }
 

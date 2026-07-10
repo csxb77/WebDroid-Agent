@@ -140,8 +140,14 @@ export function mapActionCoordinates(
 
 function mapPoint(x: number, y: number, fromScreen: ScreenSize, toScreen: ScreenSize) {
   return {
-    x: clampCoordinate(Math.round((x / fromScreen.width) * toScreen.width), toScreen.width),
-    y: clampCoordinate(Math.round((y / fromScreen.height) * toScreen.height), toScreen.height),
+    x: clampCoordinate(
+      Math.round((x / fromScreen.width) * (toScreen.width - 1)),
+      toScreen.width,
+    ),
+    y: clampCoordinate(
+      Math.round((y / fromScreen.height) * (toScreen.height - 1)),
+      toScreen.height,
+    ),
   }
 }
 

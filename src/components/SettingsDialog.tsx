@@ -1,9 +1,9 @@
 import {
-  Archive,
   BadgeInfo,
-  Boxes,
   CircleAlert,
   Code2,
+  Database,
+  Download,
   ExternalLink,
   FileKey2,
   GitFork,
@@ -13,22 +13,26 @@ import {
   ListChecks,
   MessageSquareX,
   Bell,
+  Package,
   PanelTop,
   RotateCcw,
   Search,
   ScrollText,
+  SlidersHorizontal,
   SquareTerminal,
   Star,
   SunMoon,
   Tag,
+  Upload,
   Wrench,
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { AppCopy } from '../lib/appCopy'
 import { REPOSITORY_URL, type RepositoryStats } from '../lib/repository'
 import {
+  MAX_AGENT_STEPS,
   MIN_AGENT_STEPS,
   type LanguageMode,
   type ThemeMode,
@@ -53,6 +57,10 @@ export type SettingsDialogProps = {
   onClearChatHistory: () => void
   onClearRunLog: () => void
   onClose: () => void
+  onExportChatHistory: () => void
+  onExportSettings: () => void
+  onImportChatHistory: () => void
+  onImportSettings: () => void
   onMaxStepsChange: (value: number) => void
   onResetAppCards: () => void
   onSecretRecordsJsonChange: (value: string) => void
@@ -98,6 +106,10 @@ export function SettingsDialog({
   onClearChatHistory,
   onClearRunLog,
   onClose,
+  onExportChatHistory,
+  onExportSettings,
+  onImportChatHistory,
+  onImportSettings,
   onMaxStepsChange,
   onResetAppCards,
   onSecretRecordsJsonChange,
@@ -112,6 +124,15 @@ export function SettingsDialog({
   themeMode,
 }: SettingsDialogProps) {
   const [activeTab, setActiveTab] = useState<SettingsTabId>('preferences')
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
   const settingsTabs: SettingsTab[] = [
     {
       id: 'preferences',
@@ -122,13 +143,13 @@ export function SettingsDialog({
     {
       id: 'resources',
       compactLabel: copy.settingsResourcesShort,
-      icon: Boxes,
+      icon: Package,
       label: copy.settingsResources,
     },
     {
       id: 'data',
       compactLabel: copy.dataManagementShort,
-      icon: Archive,
+      icon: Database,
       label: copy.dataManagement,
     },
     {
@@ -260,6 +281,7 @@ export function SettingsDialog({
                       <input
                         type="number"
                         min={MIN_AGENT_STEPS}
+                        max={MAX_AGENT_STEPS}
                         value={maxSteps}
                         onChange={(event) => onMaxStepsChange(event.target.valueAsNumber)}
                       />
@@ -310,18 +332,58 @@ export function SettingsDialog({
                   </section>
                   <section className="settings-data-management" aria-label={copy.dataManagement}>
                     <div className="settings-data-management-title">
-                      <Archive size={16} />
+                      <Database size={16} />
                       <span>{copy.dataManagement}</span>
                     </div>
-                    <div className="settings-data-actions">
-                      <button type="button" className="danger" onClick={onClearChatHistory}>
-                        <MessageSquareX size={16} />
-                        {copy.clearChatHistory}
-                      </button>
-                      <button type="button" onClick={onClearRunLog}>
-                        <ScrollText size={16} />
-                        {copy.clearRunLog}
-                      </button>
+                    <div className="settings-data-groups">
+                      <div className="settings-data-group">
+                        <span className="settings-data-group-label">
+                          <MessageSquareX size={14} />
+                          {copy.history}
+                        </span>
+                        <div className="settings-data-group-actions">
+                          <button type="button" onClick={onExportChatHistory}>
+                            <Download size={16} />
+                            {copy.exportChatHistory}
+                          </button>
+                          <button type="button" onClick={onImportChatHistory}>
+                            <Upload size={16} />
+                            {copy.importChatHistory}
+                          </button>
+                          <button type="button" className="danger" onClick={onClearChatHistory}>
+                            <MessageSquareX size={16} />
+                            {copy.clearChatHistory}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="settings-data-group">
+                        <span className="settings-data-group-label">
+                          <SlidersHorizontal size={14} />
+                          {copy.settings}
+                        </span>
+                        <div className="settings-data-group-actions">
+                          <button type="button" onClick={onExportSettings}>
+                            <Download size={16} />
+                            {copy.exportSettings}
+                          </button>
+                          <button type="button" onClick={onImportSettings}>
+                            <Upload size={16} />
+                            {copy.importSettings}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="settings-data-group">
+                        <span className="settings-data-group-label">
+                          <ScrollText size={14} />
+                          {copy.runLog}
+                        </span>
+                        <div className="settings-data-group-actions">
+                          <button type="button" onClick={onClearRunLog}>
+                            <ScrollText size={16} />
+                            {copy.clearRunLog}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </section>
                 </div>
@@ -377,14 +439,33 @@ export function SettingsDialog({
                   className="settings-section settings-project"
                   aria-label={copy.settingsProjectInfo}
                 >
-                  <p className="settings-copy">{copy.appDescription}</p>
+                  <div className="settings-project-hero">
+                    <img
+                      alt="WebDroid Agent logo"
+                      className="settings-project-logo"
+                      src="/webdroid-agent-logo-128.png"
+                    />
+                    <div className="settings-project-hero-text">
+                      <h3 className="settings-project-name">WebDroid Agent</h3>
+                      <p className="settings-project-tagline">{copy.appTagline}</p>
+                      <div className="settings-project-badges">
+                        <span className="app-badge"><Tag size={13} />{copy.appVersion}: <strong>{__APP_VERSION__}</strong></span>
+                        <span className="app-badge"><Code2 size={13} />React 19 · TypeScript</span>
+                        <span className="app-badge"><Wrench size={13} />WebUSB · WebADB</span>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="settings-copy settings-project-description">{copy.appDescription}</p>
+                  <ul className="settings-project-features">
+                    {copy.appFeatures.map((feature) => (
+                      <li key={feature}>
+                        <ListChecks size={15} />
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
                   <div className="settings-project-grid">
                     <div className="settings-project-links">
-                      <div className="app-version" aria-label={copy.appVersion}>
-                        <Tag size={18} />
-                        <strong>{__APP_VERSION__}</strong>
-                        <span>{copy.appVersion}</span>
-                      </div>
                       <a
                         className="repository-link"
                         href={REPOSITORY_URL}

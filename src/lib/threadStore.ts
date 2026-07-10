@@ -17,10 +17,15 @@ const UPDATED_AT_INDEX = 'updatedAt'
 const PERSISTED_FULL_TURN_COUNT = 12
 const MAX_PERSISTED_EVENTS = 240
 const MAX_PERSISTED_HISTORY_ITEMS = 160
+const MAX_PERSISTED_MESSAGES = 320
+const MAX_PERSISTED_TURNS = 200
+const MAX_PERSISTED_ACTION_OUTCOMES = 200
+const MAX_PERSISTED_ERROR_DESCRIPTIONS = 100
 const MAX_PERSISTED_MODEL_OUTPUT_CHARS = 8000
 const MAX_PERSISTED_MESSAGE_CHARS = 12000
 const MAX_PERSISTED_OBSERVATION_CHARS = 4000
 const MAX_PERSISTED_EXECUTION_RESULT_CHARS = 4000
+const MAX_PERSISTED_LAST_EXECUTION_RESULT_CHARS = 4000
 
 export type AgentThreadSummary = {
   id: string
@@ -34,6 +39,7 @@ export type AgentThreadSummary = {
 export type AgentThreadStore = {
   save(thread: AgentThread): Promise<void>
   load(threadId: string): Promise<AgentThread | null>
+  loadAll(): Promise<AgentThread[]>
   loadLatest(): Promise<AgentThread | null>
   list(): Promise<AgentThreadSummary[]>
   delete(threadId: string): Promise<void>
@@ -81,6 +87,9 @@ export function createMemoryThreadStore(initialThreads: readonly AgentThread[] =
     async load(threadId) {
       const thread = threads.get(threadId)
       return thread ? cloneThreadForRuntime(thread) : null
+    },
+    async loadAll() {
+      return sortedThreads([...threads.values()].map(cloneThreadForRuntime))
     },
     async loadLatest() {
       const [latestSummary] = sortedSummaries([...summaries.values()])
@@ -132,6 +141,14 @@ export function createIndexedDbThreadStore(
         ),
       )
       return result ? cloneThreadForRuntime(result) : null
+    },
+    async loadAll() {
+      const result = await withDatabase(indexedDb, databaseName, (database) =>
+        runObjectStoreRequest<AgentThread[]>(database, THREAD_STORE, 'readonly', (store) =>
+          store.getAll(),
+        ),
+      )
+      return sortedThreads((result ?? []).map(cloneThreadForRuntime))
     },
     async loadLatest() {
       const result = await withDatabase(indexedDb, databaseName, loadLatestThread)
@@ -261,6 +278,10 @@ function listThreadSummaries(database: IDBDatabase) {
       cursor.continue()
     }
     request.onerror = () => reject(request.error ?? new Error('Failed to list thread summaries.'))
+    transaction.onerror = () =>
+      reject(transaction.error ?? new Error('Failed to list thread summaries.'))
+    transaction.onabort = () =>
+      reject(transaction.error ?? new Error('Thread store transaction aborted.'))
   })
 }
 
@@ -286,7 +307,16 @@ function loadLatestThread(database: IDBDatabase) {
 
       const summary = cursor.value as AgentThreadSummary
       const threadRequest = threadStore.get(summary.id)
-      threadRequest.onsuccess = () => resolve(threadRequest.result as AgentThread | undefined)
+      threadRequest.onsuccess = () => {
+        const result = threadRequest.result as AgentThread | undefined
+        if (result) {
+          resolve(result)
+          return
+        }
+        // Orphaned summary (thread record missing): continue to the next summary
+        // instead of silently returning null and ignoring valid threads.
+        cursor.continue()
+      }
       threadRequest.onerror = () =>
         reject(threadRequest.error ?? new Error('Failed to load latest thread.'))
     }
@@ -301,8 +331,20 @@ function backfillThreadSummaries(threadStore: IDBObjectStore, summaryStore: IDBO
     if (!cursor) {
       return
     }
-    summaryStore.put(toThreadSummary(cursor.value as AgentThread))
+
+    const putRequest = summaryStore.put(toThreadSummary(cursor.value as AgentThread))
+    putRequest.onerror = () => {
+      // Stop the backfill on failure; the migration will surface the error
+      // via the versionchange transaction's abort path rather than looping
+      // silently over an aborted transaction.
+    }
+    if (putRequest.error) {
+      return
+    }
     cursor.continue()
+  }
+  cursorRequest.onerror = () => {
+    // Cursor open failed; allow the outer versionchange transaction to abort.
   }
 }
 
@@ -342,10 +384,13 @@ function cloneThreadForPersistence(thread: AgentThread): AgentThread {
     deviceState: cloneValue(thread.deviceState),
     visitedPackages: [...thread.visitedPackages],
     visitedActivities: [...thread.visitedActivities],
-    actionOutcomes: [...thread.actionOutcomes],
-    errorDescriptions: thread.errorDescriptions.map((value) =>
-      truncateRetainedText(value, MAX_PERSISTED_EXECUTION_RESULT_CHARS),
-    ),
+    actionOutcomes: thread.actionOutcomes.slice(-MAX_PERSISTED_ACTION_OUTCOMES),
+    errorDescriptions: thread.errorDescriptions
+      .slice(-MAX_PERSISTED_ERROR_DESCRIPTIONS)
+      .map((value) => truncateRetainedText(value, MAX_PERSISTED_EXECUTION_RESULT_CHARS)),
+    lastExecutionResult: thread.lastExecutionResult
+      ? truncateRetainedText(thread.lastExecutionResult, MAX_PERSISTED_LAST_EXECUTION_RESULT_CHARS)
+      : thread.lastExecutionResult,
     memory: thread.memory.map((value) => truncateRetainedText(value, MAX_PERSISTED_MESSAGE_CHARS)),
     screenshotReferences: cloneScreenshotReferences(thread.screenshotReferences ?? []),
     history: thread.history.slice(-MAX_PERSISTED_HISTORY_ITEMS).map((item) => ({
@@ -355,7 +400,7 @@ function cloneThreadForPersistence(thread: AgentThread): AgentThread {
         MAX_PERSISTED_EXECUTION_RESULT_CHARS,
       ),
     })),
-    messages: thread.messages.map((message) => ({
+    messages: thread.messages.slice(-MAX_PERSISTED_MESSAGES).map((message) => ({
       ...message,
       content: truncateRetainedText(
         message.content,
@@ -365,7 +410,7 @@ function cloneThreadForPersistence(thread: AgentThread): AgentThread {
       ),
     })),
     pendingUserMessages: thread.pendingUserMessages.map((message) => ({ ...message })),
-    turns: thread.turns.map((turn) => ({
+    turns: thread.turns.slice(-MAX_PERSISTED_TURNS).map((turn) => ({
       ...turn,
       action: cloneValue(turn.action),
       executionAction: cloneValue(turn.executionAction),
@@ -537,6 +582,11 @@ function loadLegacyLatestThread(database: IDBDatabase) {
     const index = store.indexNames.contains(UPDATED_AT_INDEX)
       ? store.index(UPDATED_AT_INDEX)
       : null
+
+    transaction.onerror = () =>
+      reject(transaction.error ?? new Error('Failed to load latest thread.'))
+    transaction.onabort = () =>
+      reject(transaction.error ?? new Error('Thread store transaction aborted.'))
 
     if (!index) {
       const request = store.getAll()
